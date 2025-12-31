@@ -55,3 +55,50 @@
         const totalFrames = 22;
         const textures = [];
         let currentIdx = 0;
+        let lastTime = 0;
+        let isMarkerFound = false;
+
+        // 1. 텍스처 로딩 최적화
+        const texLoader = new THREE.TextureLoader();
+        for (let i = 0; i < totalFrames; i++) {
+            const frameNum = String(i).padStart(3, '0');
+            textures.push(texLoader.load(`./frames/frame_${frameNum}.png`));
+        }
+
+        // 2. 엔진 로드 완료 감지 및 로더 제거
+        window.addEventListener('arjs-nft-loaded', () => {
+            const loader = document.querySelector('#loader');
+            if (loader) loader.style.display = 'none';
+        });
+
+        // 3. 고사양 기기의 프레임 변동폭을 잡는 애니메이션 로직
+        function animate(time) {
+            if (!isMarkerFound) return;
+            
+            const delta = time - lastTime;
+            // 15 FPS 고정으로 부드러운 재생 유지
+            if (delta > 66) { 
+                const mesh = plane.getObject3D('mesh');
+                if (mesh && textures[currentIdx]) {
+                    mesh.material.map = textures[currentIdx];
+                    mesh.material.needsUpdate = true;
+                }
+                currentIdx = (currentIdx + 1) % totalFrames;
+                lastTime = time - (delta % 66);
+            }
+            requestAnimationFrame(animate);
+        }
+
+        nft.addEventListener('markerFound', () => {
+            isMarkerFound = true;
+            plane.setAttribute('visible', true);
+            requestAnimationFrame(animate);
+        });
+
+        nft.addEventListener('markerLost', () => {
+            isMarkerFound = false;
+            plane.setAttribute('visible', false);
+        });
+    </script>
+</body>
+</html>
