@@ -3,20 +3,20 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Final Professional Fix</title>
+    <title>AR Commercial Final - Perfect Rendering</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
-    <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff;">
-        렌더링 정밀 교정 중...
+    <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff; font-family: sans-serif;">
+        상용화 엔진 최적화 완료 중...
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: true; colorManagement: true;"
+        renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: true; colorManagement: true; sortObjects: false;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft
@@ -30,10 +30,10 @@
             
             <a-plane
                 id="ani-plane"
-                position="100 0.5 -280" 
+                position="100 1.0 -280" 
                 rotation="-90 0 0"
                 width="400" height="400"
-                material="shader: flat; transparent: true; alphaTest: 0.01; side: double; depthTest: false; depthWrite: false; fog: false; blending: normal;"
+                material="shader: flat; transparent: true; alphaTest: 0.01; side: double; depthTest: false; depthWrite: false; fog: false;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -67,7 +67,7 @@
                 const imgUrl = `${rootPath}frames/frame_${String(index).padStart(3, '0')}.png`;
                 texLoader.load(imgUrl, (tex) => {
                     tex.encoding = THREE.sRGBEncoding;
-                    // 저각도에서 텍스처 뭉개짐을 방지하기 위한 Anisotropy(이방성 필터링) 적용
+                    // [상용화 핵심] 사선 각도에서 텍스처 검게 변함 방지 (Anisotropy)
                     tex.anisotropy = 16; 
                     textures[index] = tex;
                     loadedCount++;
@@ -80,14 +80,20 @@
             if (video && video.readyState >= 2 && loadedCount >= totalFrames) {
                 const mesh = plane.getObject3D('mesh');
                 if (mesh) {
-                    mesh.renderOrder = 99999;
-                    // 각도가 낮아질 때 발생하는 셰이더 오류를 강제 교정
+                    // [GPU 레벨 강제 명령]
+                    // 1. 렌더링 순서를 가장 마지막으로 미뤄 배경 위에 무조건 덮어씌움
+                    mesh.renderOrder = 10000;
+                    // 2. 재질의 모든 조명 반응성 제거 및 색상 고정
                     mesh.material.onBeforeCompile = (shader) => {
                         shader.fragmentShader = shader.fragmentShader.replace(
-                            `vec4 diffuseColor = vec4( diffuse, opacity );`,
-                            `vec4 diffuseColor = vec4( diffuse, opacity ); 
-                             if (diffuseColor.a < 0.01) discard;`
+                            `#include <common>`,
+                            `#include <common>
+                             #undef USE_FOG` // 안개 효과 강제 삭제
                         );
+                    };
+                    // 3. 깊이 판정 로직 수동 무력화
+                    mesh.onBeforeRender = function(renderer) {
+                        renderer.clearDepth();
                     };
                 }
                 loader.style.display = 'none';
