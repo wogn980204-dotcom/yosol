@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Speed Optimize</title>
+    <title>AR Galaxy Optimized</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -17,21 +17,21 @@
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <p>AR 엔진 즉시 로딩 중...</p>
+        <p>갤럭시 최적화 엔진 구동 중...</p>
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="antialias: false; alpha: true; precision: mediump; logarithmicDepthBuffer: false;"
-        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
+        renderer="antialias: false; alpha: true; precision: mediump; logarithmicDepthBuffer: false; sortObjects: true;"
+        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; sourceWidth:640; sourceHeight:480; displayWidth: 640; displayHeight: 480;">
 
         <a-nft
             id="nft-target"
             type="nft"
             url="./AR" 
             smooth="true"
-            smoothCount="10" 
+            smoothCount="15" 
             smoothTolerance="0.01"
             smoothThreshold="5">
             
@@ -57,43 +57,17 @@
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 텍스처 로딩 (로딩 중단 방지를 위해 단순화)
+        // 텍스처 로딩 시 비동기 부하 분산
         const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             const frameNum = String(i).padStart(3, '0');
-            textures.push(texLoader.load(`./frames/frame_${frameNum}.png`));
+            const tex = texLoader.load(`./frames/frame_${frameNum}.png`);
+            tex.minFilter = THREE.LinearFilter;
+            textures.push(tex);
         }
 
-        // 엔진 로드 완료 시 즉시 로더 제거
+        // 갤럭시 브라우저 호환성을 위한 즉시 해제 로직
         window.addEventListener('arjs-nft-loaded', () => {
-            const loader = document.querySelector('#loader');
-            if (loader) loader.style.display = 'none';
-        });
-
-        function animate(time) {
-            if (!isMarkerFound) return;
-            if (time - lastTime > 66) { 
-                const mesh = plane.getObject3D('mesh');
-                if (mesh && textures[currentIdx]) {
-                    mesh.material.map = textures[currentIdx];
-                    mesh.material.needsUpdate = true;
-                }
-                currentIdx = (currentIdx + 1) % totalFrames;
-                lastTime = time;
-            }
-            requestAnimationFrame(animate);
-        }
-
-        nft.addEventListener('markerFound', () => {
-            isMarkerFound = true;
-            plane.setAttribute('visible', true);
-            requestAnimationFrame(animate);
-        });
-
-        nft.addEventListener('markerLost', () => {
-            isMarkerFound = false;
-            plane.setAttribute('visible', false);
-        });
-    </script>
-</body>
-</html>
+            setTimeout(() => {
+                document.querySelector('#loader').style.display = 'none';
+            }, 1000);
