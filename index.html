@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Alpha Final Fix</title>
+    <title>AR Angle & Alpha Perfect Fix</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -11,18 +11,17 @@
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
             background-color: #000; z-index: 9999;
             display: flex; justify-content: center; align-items: center; color: #fff;
-            font-family: sans-serif;
         }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
-    <div class="arjs-loader" id="loader">이미지 데이터를 동기화하는 중...</div>
+    <div class="arjs-loader" id="loader">렌더링 엔진 최적화 중...</div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="antialias: false; alpha: true; precision: mediump; logarithmicDepthBuffer: false; colorManagement: true;"
+        renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: true; colorManagement: true; sortObjects: true;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft
@@ -39,7 +38,7 @@
                 position="100 0 -280" 
                 rotation="-90 0 0"
                 width="400" height="400"
-                material="shader: flat; transparent: true; alphaTest: 0.5; side: double; depthWrite: false;"
+                material="shader: flat; transparent: true; alphaTest: 0.1; side: double; depthTest: false; depthWrite: false;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -52,7 +51,6 @@
         const plane = document.querySelector('#ani-plane');
         const loader = document.querySelector('#loader');
 
-        // 1. 깃허브 절대 경로 정밀 추출
         const getRootPath = () => {
             const path = window.location.pathname;
             const dir = path.substring(0, path.lastIndexOf('/') + 1);
@@ -62,50 +60,44 @@
         nft.setAttribute('url', rootPath + 'AR');
 
         const totalFrames = 22;
-        const textures = new Array(totalFrames); // 인덱스 고정을 위해 크기 지정
+        const textures = new Array(totalFrames);
         let loadedCount = 0;
         let currentIdx = 0;
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 2. 텍스처 로딩 로직 (인덱스 보존 및 순서 보장)
+        // 텍스처 로딩 - 각 프레임에 대해 색상 공간 유지 및 필터링 최적화
         const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             ((index) => {
-                const frameNum = String(index).padStart(3, '0');
-                const imgUrl = `${rootPath}frames/frame_${frameNum}.png`;
-                
+                const imgUrl = `${rootPath}frames/frame_${String(index).padStart(3, '0')}.png`;
                 texLoader.load(imgUrl, (tex) => {
                     tex.encoding = THREE.sRGBEncoding;
-                    tex.flipY = false; // 메모리 절약을 위한 Y축 뒤집기 방지
+                    // 각도에 따른 뭉개짐 방지를 위한 선형 필터링
+                    tex.minFilter = THREE.LinearFilter;
+                    tex.magFilter = THREE.LinearFilter;
                     textures[index] = tex;
                     loadedCount++;
-                    
-                    // 첫 프레임 로드 시 미리 plane에 할당 (깜빡임 방지)
-                    if (index === 0) {
-                        const mesh = plane.getObject3D('mesh');
-                        if (mesh) {
-                            mesh.material.map = tex;
-                            mesh.material.needsUpdate = true;
-                        }
-                    }
                 });
             })(i);
         }
 
-        // 3. 엔진 및 카메라 준비 상태 감시
         const readyCheck = setInterval(() => {
             const video = document.querySelector('video');
             if (video && video.readyState >= 2 && loadedCount >= totalFrames) {
+                // [추가 디버깅] 메쉬 생성 직후 셰이더 속성 강제 주입
+                const mesh = plane.getObject3D('mesh');
+                if (mesh) {
+                    mesh.renderOrder = 999; // 렌더링 순서 최상위 고정
+                    mesh.onBeforeRender = function(renderer) { renderer.clearDepth(); };
+                }
                 loader.style.display = 'none';
                 clearInterval(readyCheck);
             }
         }, 500);
 
-        // 4. 최적화된 애니메이션 루프
         function animate(time) {
             if (!isMarkerFound) return;
-
             if (time - lastTime > 66) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
@@ -118,7 +110,6 @@
             requestAnimationFrame(animate);
         }
 
-        // 5. 이벤트 리스너 (마커 탐지 시 즉시 애니메이션 시작)
         nft.addEventListener('markerFound', () => {
             isMarkerFound = true;
             plane.setAttribute('visible', true);
