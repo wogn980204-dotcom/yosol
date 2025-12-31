@@ -3,14 +3,14 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Alpha Perfect Fix</title>
+    <title>AR Final Alpha Solution</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
     <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff; font-family: sans-serif;">
-        실루엣 제거 엔진 가동 중...
+        이미지 품질 및 실루엣 교정 중...
     </div>
 
     <a-scene
@@ -24,16 +24,16 @@
             type="nft"
             url="" 
             smooth="true"
-            smoothCount="20"
-            smoothTolerance="0.01"
-            smoothThreshold="2">
+            smoothCount="25"
+            smoothTolerance="0.005"
+            smoothThreshold="3">
             
             <a-plane
                 id="ani-plane"
-                position="100 10.0 -280" 
+                position="100 30.0 -280" 
                 rotation="-90 0 0"
                 width="450" height="450"
-                material="shader: flat; transparent: true; alphaTest: 0.05; side: double; fog: false;"
+                material="shader: flat; side: double; transparent: true;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -74,22 +74,25 @@
             })(i);
         }
 
-        // [상용화 핵심: 실루엣 제거 커스텀 렌더 루프]
+        // [실루엣 강제 파괴 렌더링 로직]
         const readyCheck = setInterval(() => {
             const video = document.querySelector('video');
             if (video && video.readyState >= 2 && loadedCount >= totalFrames) {
                 const mesh = plane.getObject3D('mesh');
                 if (mesh) {
-                    // 1. 재질의 깊이 테스트를 완전히 비활성화 (실루엣 방지 핵심)
+                    // GPU 레벨에서 깊이 테스트와 블렌딩 모드 강제 고정
                     mesh.material.depthTest = false;
                     mesh.material.depthWrite = false;
-                    
-                    // 2. 렌더링 순서를 최상위로 고정
+                    mesh.material.blending = THREE.NormalBlending;
                     mesh.renderOrder = 999999;
                     
-                    // 3. 매 프레임 렌더링 직전 깊이 정보를 강제로 지우는 콜백 주입
-                    mesh.onBeforeRender = function(renderer) {
-                        renderer.clearDepth();
+                    // 셰이더 내부를 직접 수정하여 투명 영역의 실루엣을 삭제
+                    mesh.material.onBeforeCompile = (shader) => {
+                        shader.fragmentShader = shader.fragmentShader.replace(
+                            `vec4 diffuseColor = vec4( diffuse, opacity );`,
+                            `vec4 diffuseColor = vec4( diffuse, opacity );
+                             if (diffuseColor.a < 0.5) discard;` // 0.5 이하는 픽셀을 아예 버림
+                        );
                     };
                 }
                 loader.style.display = 'none';
@@ -99,7 +102,8 @@
 
         function animate(time) {
             if (!isMarkerFound) return;
-            if (time - lastTime >= 66.6) { // 15FPS 유지
+            // 15FPS 재생 속도 (66.6ms)
+            if (time - lastTime >= 66.6) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
                     mesh.material.map = textures[currentIdx];
