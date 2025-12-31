@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Universal - Stable</title>
+    <title>AR Final Stabilized</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -11,39 +11,36 @@
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
             background-color: black; z-index: 9999;
             display: flex; flex-direction: column; justify-content: center; align-items: center; color: white;
-            font-family: sans-serif;
         }
-        #status-msg { font-size: 13px; color: #888; margin-top: 10px; }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <p style="font-size: 1.1em;">AR 데이터 분석 중...</p>
-        <p id="status-msg">마커 파일(AR.fset)을 불러오고 있습니다.</p>
+        <p>초정밀 안정화 데이터 로드 중...</p>
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="logarithmicDepthBuffer: true; antialias: true; precision: highp;"
+        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true; precision: highp;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft
             id="nft-target"
             type="nft"
-            url="" 
+            url="./AR" 
             smooth="true"
-            smoothCount="15"
+            smoothCount="20"
             smoothTolerance="0.01"
             smoothThreshold="5">
             
             <a-plane
                 id="ani-plane"
-                position="150 0 -150" 
+                position="180 0 -220" 
                 rotation="-90 0 0"
-                width="300" height="300"
-                material="transparent: true; shader: flat; side: double;"
+                width="350" height="350"
+                material="transparent: true; shader: flat; side: double; depthTest: false;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -52,70 +49,41 @@
     </a-scene>
 
     <script>
-        const statusEl = document.querySelector('#status-msg');
         const nft = document.querySelector('#nft-target');
         const plane = document.querySelector('#ani-plane');
-        
-        // 1. 깃허브 절대 경로 계산 (에러 방지 핵심)
-        const currentPath = window.location.href.split('?')[0].split('#')[0];
-        const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
-        
-        // 캡처 화면에 따라 대문자 'AR' 마커 파일 가리킴
-        nft.setAttribute('url', basePath + 'AR');
-
-        // 2. 애니메이션 프레임 준비 (22장)
         const totalFrames = 22;
         const textures = [];
         let currentIdx = 0;
-        let lastUpdate = 0;
-        let isMarkerActive = false;
+        let lastTime = 0;
+        let isMarkerFound = false;
 
-        const texLoader = new THREE.TextureLoader();
+        // 텍스처 프리로딩 (이미지 로드 완료 로그 확인됨)
+        const loader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
-            const frameName = String(i).padStart(3, '0');
-            // frames 폴더 내의 frame_000.png ~ frame_021.png 로드
-            textures.push(texLoader.load(`${basePath}frames/frame_${frameName}.png`));
+            const frameNum = String(i).padStart(3, '0');
+            textures.push(loader.load(`./frames/frame_${frameNum}.png`));
         }
 
-        // 3. 엔진 로드 완료 감지
         window.addEventListener('arjs-nft-loaded', () => {
-            console.log("NFT 트래킹 데이터 로드 성공");
-            statusEl.innerText = "준비 완료! 마커 이미지를 정면으로 비춰주세요.";
-            setTimeout(() => {
-                document.querySelector('#loader').style.display = 'none';
-            }, 800);
+            document.querySelector('#loader').style.display = 'none';
         });
 
-        // 4. 고성능 애니메이션 엔진
-        function playAnimation(time) {
-            if (!isMarkerActive) return;
+        function animate(time) {
+            if (!isMarkerFound) return;
 
-            // 약 15 FPS 속도로 부드럽게 전환
-            if (time - lastUpdate > 66.6) {
+            // 15 FPS 동기화
+            if (time - lastTime > 66) {
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
                     mesh.material.map = textures[currentIdx];
                     mesh.material.needsUpdate = true;
                 }
                 currentIdx = (currentIdx + 1) % totalFrames;
-                lastUpdate = time;
+                lastTime = time;
             }
-            requestAnimationFrame(playAnimation);
+            requestAnimationFrame(animate);
         }
 
-        // 5. 마커 감지 및 유실 이벤트
         nft.addEventListener('markerFound', () => {
-            console.log("마커 감지됨");
-            isMarkerActive = true;
+            isMarkerFound = true;
             plane.setAttribute('visible', true);
-            requestAnimationFrame(playAnimation);
-        });
-
-        nft.addEventListener('markerLost', () => {
-            console.log("마커 놓침");
-            isMarkerActive = false;
-            plane.setAttribute('visible', false);
-        });
-    </script>
-</body>
-</html>
