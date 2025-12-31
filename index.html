@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Angle & Alpha Perfect Fix</title>
+    <title>AR Commercial Final - Alpha Fix</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -11,12 +11,13 @@
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
             background-color: #000; z-index: 9999;
             display: flex; justify-content: center; align-items: center; color: #fff;
+            font-family: sans-serif;
         }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
-    <div class="arjs-loader" id="loader">렌더링 엔진 최적화 중...</div>
+    <div class="arjs-loader" id="loader">상용화 엔진 최적화 및 텍스처 동기화 중...</div>
 
     <a-scene
         embedded
@@ -38,7 +39,7 @@
                 position="100 0 -280" 
                 rotation="-90 0 0"
                 width="400" height="400"
-                material="shader: flat; transparent: true; alphaTest: 0.1; side: double; depthTest: false; depthWrite: false;"
+                material="shader: flat; transparent: true; alphaTest: 0.05; side: double; depthTest: false; depthWrite: false; fog: false;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -51,6 +52,7 @@
         const plane = document.querySelector('#ani-plane');
         const loader = document.querySelector('#loader');
 
+        // 1. 깃허브 절대 경로 정밀 추출
         const getRootPath = () => {
             const path = window.location.pathname;
             const dir = path.substring(0, path.lastIndexOf('/') + 1);
@@ -66,14 +68,13 @@
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 텍스처 로딩 - 각 프레임에 대해 색상 공간 유지 및 필터링 최적화
+        // 2. 텍스처 로딩 (sRGB 보존 및 필터링 최적화)
         const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             ((index) => {
                 const imgUrl = `${rootPath}frames/frame_${String(index).padStart(3, '0')}.png`;
                 texLoader.load(imgUrl, (tex) => {
                     tex.encoding = THREE.sRGBEncoding;
-                    // 각도에 따른 뭉개짐 방지를 위한 선형 필터링
                     tex.minFilter = THREE.LinearFilter;
                     tex.magFilter = THREE.LinearFilter;
                     textures[index] = tex;
@@ -82,20 +83,24 @@
             })(i);
         }
 
+        // 3. 상용화 핵심: 렌더링 우선순위 강제 주입
         const readyCheck = setInterval(() => {
             const video = document.querySelector('video');
             if (video && video.readyState >= 2 && loadedCount >= totalFrames) {
-                // [추가 디버깅] 메쉬 생성 직후 셰이더 속성 강제 주입
                 const mesh = plane.getObject3D('mesh');
                 if (mesh) {
-                    mesh.renderOrder = 999; // 렌더링 순서 최상위 고정
-                    mesh.onBeforeRender = function(renderer) { renderer.clearDepth(); };
+                    // 카메라 각도와 상관없이 무조건 최상단에 그리도록 강제
+                    mesh.renderOrder = 9999; 
+                    mesh.onBeforeRender = function(renderer) {
+                        renderer.clearDepth(); // 깊이 버퍼를 초기화하여 겹침 현상 원천 차단
+                    };
                 }
                 loader.style.display = 'none';
                 clearInterval(readyCheck);
             }
         }, 500);
 
+        // 4. 애니메이션 제어
         function animate(time) {
             if (!isMarkerFound) return;
             if (time - lastTime > 66) { 
