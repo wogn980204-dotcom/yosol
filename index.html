@@ -3,19 +3,27 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Animation Stable</title>
+    <title>AR Animation - Ultra Stable</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <style>
+        .arjs-loader {
+            height: 100%; width: 100%; position: absolute; top: 0; left: 0;
+            background-color: black; z-index: 9999;
+            display: flex; justify-content: center; align-items: center; color: white;
+        }
+    </style>
 </head>
+
 <body style="margin: 0; overflow: hidden;">
-    <div id="loader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:white;display:flex;justify-content:center;align-items:center;z-index:999;">
-        <p>시스템 안정화 로딩 중...</p>
+    <div class="arjs-loader" id="loader">
+        <p>초정밀 트래킹 안정화 중...</p>
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true; precision: highp; colorManagement: true;"
+        renderer="logarithmicDepthBuffer: true; antialias: true; precision: highp;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft
@@ -23,8 +31,8 @@
             type="nft"
             url="./AR" 
             smooth="true"
-            smoothCount="15"
-            smoothTolerance="0.01"
+            smoothCount="10"
+            smoothTolerance="0.05"
             smoothThreshold="5">
             
             <a-plane
@@ -32,9 +40,32 @@
                 position="150 0 -150" 
                 rotation="-90 0 0"
                 width="300" height="300"
-                material="transparent: true; shader: flat; side: double; opacity: 1;"
+                material="transparent: true; shader: flat; side: double;"
                 visible="false">
             </a-plane>
         </a-nft>
 
         <a-entity camera></a-entity>
+    </a-scene>
+
+    <script>
+        const nft = document.querySelector('#nft-target');
+        const plane = document.querySelector('#ani-plane');
+        const totalFrames = 22;
+        const textures = [];
+        let currentIdx = 0;
+        let lastTime = 0;
+        let isMarkerFound = false;
+
+        // 텍스처 프리로딩 (성능 최적화)
+        const loader = new THREE.TextureLoader();
+        for (let i = 0; i < totalFrames; i++) {
+            const frameNum = String(i).padStart(3, '0');
+            textures.push(loader.load(`./frames/frame_${frameNum}.png`));
+        }
+
+        window.addEventListener('arjs-nft-loaded', () => {
+            document.querySelector('#loader').style.display = 'none';
+        });
+
+        // 부드러운 애니메이션 루프
