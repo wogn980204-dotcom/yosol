@@ -1,53 +1,117 @@
-<!-- 동일한 HTML 기본 구조 생략 -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR 2D Animation Final</title>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <style>
+        .arjs-loader {
+            height: 100%; width: 100%; position: absolute; top: 0; left: 0;
+            background-color: black; z-index: 9999;
+            display: flex; justify-content: center; align-items: center; color: white;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
 
-<script>
-  const plane = document.querySelector('#animPlane');
-  const marker = document.querySelector('#nftMarker');
-  const totalFrames = 23;
-  const textures = [];
-  let interval = null;
-  let current = 0;
+<body style="margin: 0; overflow: hidden;">
+    <div class="arjs-loader" id="loader">
+        <div style="text-align: center;">
+            <p id="loading-text">애셋 로딩 중...</p>
+        </div>
+    </div>
 
-  const loader = new THREE.TextureLoader();
+    <a-scene
+        embedded
+        vr-mode-ui="enabled: false;"
+        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true;"
+        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
-  // 텍스처 미리 로딩
-  for (let i = 0; i < totalFrames; i++) {
-    const path = `frames/frame_${String(i).padStart(3, '0')}.png`;
-    textures.push(loader.load(path));
-  }
+        <a-nft
+            id="nft-target"
+            type="nft"
+            url="" 
+            smooth="true" smoothCount="10" smoothTolerance=".01" smoothThreshold="5">
+            
+            <a-plane
+                id="ani-plane"
+                position="0 0 0" 
+                rotation="-90 0 0"
+                width="150" height="150"
+                material="transparent: true; shader: flat; side: double;"
+                visible="false">
+            </a-plane>
+        </a-nft>
 
-  function startAnimation() {
-    // plane이 THREE 객체로 초기화될 때까지 대기
-    const mesh = plane.getObject3D('mesh');
-    if (!mesh) {
-      // 아직 초기화되지 않았으면 재시도
-      setTimeout(startAnimation, 100);
-      return;
-    }
+        <a-entity camera></a-entity>
+    </a-scene>
 
-    plane.setAttribute('visible', 'true');
-    if (interval) return;
+    <script>
+        const nft = document.querySelector('#nft-target');
+        const plane = document.querySelector('#ani-plane');
+        const loader = document.querySelector('#loader');
+        const loadingText = document.querySelector('#loading-text');
 
-    interval = setInterval(() => {
-      if (textures[current]) {
-        mesh.material.map = textures[current];
-        mesh.material.needsUpdate = true;
-      }
-      current = (current + 1) % totalFrames;
-    }, 100);
-  }
+        // 경로 자동 계산
+        let basePath = window.location.origin + window.location.pathname.replace('index.html', '').replace('인덱스.html', '');
+        if (!basePath.endsWith('/')) basePath += '/';
+        
+        // [중요] 캡처 화면에 나온 파일명 'AR'로 설정 (대소문자 주의)
+        nft.setAttribute('url', basePath + 'AR');
 
-  function stopAnimation() {
-    clearInterval(interval);
-    interval = null;
-    current = 0;
-    plane.setAttribute('visible', 'false');
-  }
+        const totalFrames = 22;
+        const textures = [];
+        let loadedCount = 0;
+        let currentIdx = 0;
+        let animationId = null;
+        let lastTime = 0;
 
-  marker.addEventListener('markerFound', startAnimation);
-  marker.addEventListener('markerLost', stopAnimation);
+        const texLoader = new THREE.TextureLoader();
+        for (let i = 0; i < totalFrames; i++) {
+            const frameNum = String(i).padStart(3, '0');
+            // '프레임' 폴더를 'frames'로 변경했다는 가정 하에 경로 설정
+            const imgPath = `${basePath}frames/frame_${frameNum}.png`;
+            
+            textures.push(texLoader.load(imgPath, () => {
+                loadedCount++;
+                loadingText.innerText = `이미지 로드 중 (${loadedCount}/${totalFrames})`;
+                if(loadedCount === totalFrames) loadingText.innerText = "준비 완료! 마커를 비추세요.";
+            }, undefined, (err) => {
+                console.error("이미지 로드 실패:", imgPath);
+            }));
+        }
 
-  window.addEventListener('load', () => {
-    document.querySelector('.arjs-loader').style.display = 'none';
-  });
-</script>
+        function playAnimation(time) {
+            if (time - lastTime > 66.6) { // 15 FPS
+                const mesh = plane.getObject3D('mesh');
+                if (mesh && textures[currentIdx]) {
+                    mesh.material.map = textures[currentIdx];
+                    mesh.material.needsUpdate = true;
+                }
+                currentIdx = (currentIdx + 1) % totalFrames;
+                lastTime = time;
+            }
+            animationId = requestAnimationFrame(playAnimation);
+        }
+
+        window.addEventListener('arjs-nft-loaded', () => {
+            loader.style.display = 'none';
+        });
+
+        nft.addEventListener('markerFound', () => {
+            plane.setAttribute('visible', true);
+            if (!animationId) animationId = requestAnimationFrame(playAnimation);
+        });
+
+        nft.addEventListener('markerLost', () => {
+            plane.setAttribute('visible', false);
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        });
+    </script>
+</body>
+</html>
