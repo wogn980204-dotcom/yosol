@@ -3,14 +3,14 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Engine 30fps Pro</title>
+    <title>AR Pro - Long Distance & Alpha Fix</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
-    <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff; font-family: sans-serif;">
-        30FPS ENGINE OPTIMIZING...
+    <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff;">
+        장거리 트래킹 엔진 최적화 중...
     </div>
 
     <a-scene
@@ -24,15 +24,15 @@
             type="nft"
             url="" 
             smooth="true"
-            smoothCount="15" 
-            smoothTolerance="0.005"
-            smoothThreshold="3">
+            smoothCount="20"
+            smoothTolerance="0.01"
+            smoothThreshold="2">
             
             <a-plane
                 id="ani-plane"
-                position="100 5.0 -280" 
+                position="100 20.0 -280" 
                 rotation="-90 0 0"
-                width="400" height="400"
+                width="450" height="450"
                 material="shader: flat; transparent: true; alphaTest: 0.5; side: double; depthTest: false; depthWrite: false; fog: false;"
                 visible="false">
             </a-plane>
@@ -67,22 +67,21 @@
                 const imgUrl = `${rootPath}frames/frame_${String(index).padStart(3, '0')}.png`;
                 texLoader.load(imgUrl, (tex) => {
                     tex.encoding = THREE.sRGBEncoding;
-                    tex.anisotropy = 16; 
+                    tex.anisotropy = 16; // 장거리 사선 각도 선명도 유지
                     textures[index] = tex;
                     loadedCount++;
                 });
             })(i);
         }
 
-        // [엔진 레벨의 렌더링 강제 명령]
         const readyCheck = setInterval(() => {
             const video = document.querySelector('video');
             if (video && video.readyState >= 2 && loadedCount >= totalFrames) {
                 const mesh = plane.getObject3D('mesh');
                 if (mesh) {
-                    mesh.renderOrder = 999999; // 레이어 최상단 강제 점유
+                    mesh.renderOrder = 999999;
                     mesh.onBeforeRender = function(renderer) {
-                        renderer.clearDepth(); // 배경 피드의 깊이 정보를 매 프레임 초기화
+                        renderer.clearDepth();
                     };
                 }
                 loader.style.display = 'none';
@@ -90,12 +89,10 @@
             }
         }, 500);
 
-        // [30FPS 애니메이션 루프]
+        // [애니메이션 15fps 정속 재생]
         function animate(time) {
             if (!isMarkerFound) return;
-
-            // 1000ms / 30fps = 33.33ms
-            if (time - lastTime >= 33.33) { 
+            if (time - lastTime >= 66.6) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
                     mesh.material.map = textures[currentIdx];
