@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Ultra Stable - Final Offset</title>
+    <title>AR Ultra Stable - Zero Shake</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -17,23 +17,23 @@
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <p>초정밀 오프셋 및 떨림 보정 중...</p>
+        <p>초정밀 떨림 억제 엔진 가동 중...</p>
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true; colorManagement: true;"
-        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
+        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true; precision: highp;"
+        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false; matrixCodeType: 3x3;">
 
         <a-nft
             id="nft-target"
             type="nft"
             url="" 
             smooth="true"
-            smoothCount="30" 
-            smoothTolerance="0.01"
-            smoothThreshold="5">
+            smoothCount="25" 
+            smoothTolerance="0.005"
+            smoothThreshold="10">
             
             <a-plane
                 id="ani-plane"
