@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Animation - Debug & Stable</title>
+    <title>AR Animation - Force Load</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -11,15 +11,15 @@
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
             background-color: black; z-index: 9999;
             display: flex; flex-direction: column; justify-content: center; align-items: center; color: white;
+            font-family: sans-serif;
         }
-        #status { font-size: 14px; color: #aaa; margin-top: 10px; }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <p>AR 시스템 초기화 중...</p>
-        <p id="status">마커 데이터를 불러오는 중입니다 (잠시만 기다려주세요)...</p>
+        <p style="font-size: 1.2em;">AR 시스템 가동 중...</p>
+        <p id="status" style="font-size: 0.8em; color: #888;">마커 데이터(AR)를 분석하고 있습니다.</p>
     </div>
 
     <a-scene
@@ -31,7 +31,7 @@
         <a-nft
             id="nft-target"
             type="nft"
-            url="./AR" 
+            url="" 
             smooth="true"
             smoothCount="15"
             smoothTolerance="0.01"
@@ -54,38 +54,41 @@
         const statusEl = document.querySelector('#status');
         const nft = document.querySelector('#nft-target');
         const plane = document.querySelector('#ani-plane');
+        
+        // [1] 현재 깃허브 페이지의 정확한 경로 계산
+        const fullPath = window.location.href.split('?')[0].split('#')[0];
+        const basePath = fullPath.substring(0, fullPath.lastIndexOf('/') + 1);
+        
+        // [2] 마커 파일 URL 강제 설정 (AR.fset 등을 찾음)
+        // 캡처 화면 상의 대문자 'AR'을 그대로 반영합니다.
+        nft.setAttribute('url', basePath + 'AR');
+
         const totalFrames = 22;
         const textures = [];
         let currentIdx = 0;
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 1. 이미지 로드 확인
-        const loader = new THREE.TextureLoader();
-        let loadedImages = 0;
+        // [3] 이미지 로딩 루틴
+        const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             const frameNum = String(i).padStart(3, '0');
-            const path = `./frames/frame_${frameNum}.png`;
-            textures.push(loader.load(path, 
-                () => {
-                    loadedImages++;
-                    if(loadedImages === totalFrames) console.log("모든 이미지 로드 완료");
-                },
-                undefined,
-                () => statusEl.innerText = `에러: ${path} 파일을 찾을 수 없습니다.`
-            ));
+            // frames 폴더 내의 파일을 불러옵니다.
+            textures.push(texLoader.load(`${basePath}frames/frame_${frameNum}.png`));
         }
+        console.log("이미지 로딩 루틴 시작");
 
-        // 2. NFT 데이터 로드 이벤트
+        // [4] NFT 로드 감지 이벤트 (로딩 화면 해제)
         window.addEventListener('arjs-nft-loaded', () => {
-            statusEl.innerText = "데이터 로드 완료! 마커를 비추세요.";
+            console.log("NFT 데이터 로드 완료!");
+            statusEl.innerText = "준비 완료! 마커를 비추세요.";
             setTimeout(() => {
                 document.querySelector('#loader').style.display = 'none';
-            }, 1000);
+            }, 500);
         });
 
-        // 3. 애니메이션 로직 (강력 안정화)
-        function updateAnimation(time) {
+        // [5] 애니메이션 재생 엔진
+        function animate(time) {
             if (!isMarkerFound) return;
             if (time - lastTime > 66) { // 15 FPS
                 const mesh = plane.getObject3D('mesh');
@@ -96,16 +99,18 @@
                 currentIdx = (currentIdx + 1) % totalFrames;
                 lastTime = time;
             }
-            requestAnimationFrame(updateAnimation);
+            requestAnimationFrame(animate);
         }
 
         nft.addEventListener('markerFound', () => {
+            console.log("마커 감지됨");
             isMarkerFound = true;
             plane.setAttribute('visible', true);
-            requestAnimationFrame(updateAnimation);
+            requestAnimationFrame(animate);
         });
 
         nft.addEventListener('markerLost', () => {
+            console.log("마커 놓침");
             isMarkerFound = false;
             plane.setAttribute('visible', false);
         });
