@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Stable & Smooth - Ultimate</title>
+    <title>AR Ultimate Rebuild</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         .arjs-loader {
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
-            background-color: #000; z-index: 9999;
+            background-color: black; z-index: 9999;
             display: flex; justify-content: center; align-items: center; color: white;
             font-family: sans-serif;
         }
@@ -18,13 +18,13 @@
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <p>AR 시스템 최적화 및 안정화 중...</p>
+        <p>시스템 전면 재구축 및 최적화 중...</p>
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: false;"
+        renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: false; colorManagement: true;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft
@@ -32,16 +32,16 @@
             type="nft"
             url="" 
             smooth="true"
-            smoothCount="12" 
-            smoothTolerance="0.01"
-            smoothThreshold="5">
+            smoothCount="20" 
+            smoothTolerance="0.001"
+            smoothThreshold="3">
             
             <a-plane
                 id="ani-plane"
                 position="100 0 -280" 
                 rotation="-90 0 0"
                 width="400" height="400"
-                material="shader: flat; transparent: true; alphaTest: 0.1; side: double; depthWrite: false; depthTest: false;"
+                material="shader: flat; transparent: true; alphaTest: 0.5; side: double; depthTest: false; depthWrite: false;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -53,7 +53,7 @@
         const nft = document.querySelector('#nft-target');
         const plane = document.querySelector('#ani-plane');
         
-        // 경로 자동 할당 (상대 경로 에러 방지)
+        // 경로 안정화
         const currentPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
         nft.setAttribute('url', currentPath + 'AR');
 
@@ -63,13 +63,14 @@
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 최적화된 텍스처 로딩
+        // 텍스처 로딩 최적화 (LinearFilter로 부드러움 강화)
         const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             const frameNum = String(i).padStart(3, '0');
             const tex = texLoader.load(`${currentPath}frames/frame_${frameNum}.png`, (t) => {
                 t.encoding = THREE.sRGBEncoding;
-                t.minFilter = THREE.LinearFilter; // 부드러운 필터링 추가
+                t.minFilter = THREE.LinearFilter;
+                t.magFilter = THREE.LinearFilter;
             });
             textures.push(tex);
         }
@@ -78,12 +79,12 @@
             document.querySelector('#loader').style.display = 'none';
         });
 
-        // 부드러운 애니메이션 업데이트 루프
+        // 프레임 업데이트 로직
         function animate(time) {
             if (!isMarkerFound) return;
 
-            // 15 FPS (약 66.6ms 간격)로 자연스러운 흐름 유지
-            if (time - lastTime > 66.6) { 
+            // 약 15fps 수준의 부드러운 재생
+            if (time - lastTime > 65) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
                     mesh.material.map = textures[currentIdx];
@@ -98,13 +99,4 @@
         nft.addEventListener('markerFound', () => {
             isMarkerFound = true;
             plane.setAttribute('visible', true);
-            requestAnimationFrame(animate);
-        });
-
-        nft.addEventListener('markerLost', () => {
-            isMarkerFound = false;
-            plane.setAttribute('visible', false);
-        });
-    </script>
-</body>
-</html>
+            request
