@@ -3,14 +3,14 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Alpha Final Shader Fix</title>
+    <title>AR Alpha Perfect Solution</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
     <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff; font-family: sans-serif;">
-        픽셀 셰이더 정밀 교정 중...
+        상용화 수준의 픽셀 교정 중...
     </div>
 
     <a-scene
@@ -24,16 +24,16 @@
             type="nft"
             url="" 
             smooth="true"
-            smoothCount="25"
-            smoothTolerance="0.005"
-            smoothThreshold="3">
+            smoothCount="30"
+            smoothTolerance="0.002"
+            smoothThreshold="2">
             
             <a-plane
                 id="ani-plane"
-                position="100 10.0 -280" 
+                position="100 20.0 -280" 
                 rotation="-90 0 0"
                 width="450" height="450"
-                material="shader: flat; side: double; transparent: true; depthTest: false; depthWrite: false;"
+                material="shader: flat; side: double; transparent: true; opacity: 1; alphaTest: 0.1;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -74,24 +74,31 @@
             })(i);
         }
 
-        // [핵심: 셰이더 코드 주입 로직]
+        // [핵심 교정 로직: 셰이더 및 렌더 큐 강제 집행]
         const readyCheck = setInterval(() => {
             const video = document.querySelector('video');
             if (video && video.readyState >= 2 && loadedCount >= totalFrames) {
                 const mesh = plane.getObject3D('mesh');
                 if (mesh) {
+                    // 1. 깊이 판정 완전 비활성화 (검은 실루엣 방지)
+                    mesh.material.depthTest = false;
+                    mesh.material.depthWrite = false;
+                    
+                    // 2. 렌더링 우선순위 극대화
                     mesh.renderOrder = 999999;
                     
-                    // GPU에게 투명도가 낮은 픽셀은 아예 무시하라고 명령 (실루엣 삭제 핵심)
+                    // 3. 커스텀 셰이더 주입: 알파값이 0.1(반투명)보다 작으면 아예 픽셀을 버림(discard)
+                    // 이 처리가 되어야 캐릭터 주변의 검은 덩어리가 사라집니다.
                     mesh.material.onBeforeCompile = (shader) => {
                         shader.fragmentShader = shader.fragmentShader.replace(
                             `#include <color_fragment>`,
                             `#include <color_fragment>
-                             if ( diffuseColor.a < 0.1 ) discard; 
+                             if ( diffuseColor.a < 0.1 ) { discard; } 
                             `
                         );
                     };
 
+                    // 4. 매 프레임 배경 데이터 초기화 콜백
                     mesh.onBeforeRender = function(renderer) {
                         renderer.clearDepth();
                     };
@@ -101,9 +108,9 @@
             }
         }, 500);
 
+        // [애니메이션 로직: 15fps 정속 유지]
         function animate(time) {
             if (!isMarkerFound) return;
-            // 15FPS 유지
             if (time - lastTime >= 66.6) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
