@@ -94,4 +94,32 @@
                 loader.style.display = 'none';
                 clearInterval(checkReady);
             }
-        }, 1000
+        }, 1000);
+
+        function animate(time) {
+            if (!isMarkerFound) return;
+            if (time - lastTime > 66) { 
+                const mesh = plane.getObject3D('mesh');
+                if (mesh && textures[currentIdx]) {
+                    mesh.material.map = textures[currentIdx];
+                    mesh.material.needsUpdate = true;
+                }
+                currentIdx = (currentIdx + 1) % totalFrames;
+                lastTime = time;
+            }
+            requestAnimationFrame(animate);
+        }
+
+        nft.addEventListener('markerFound', () => {
+            isMarkerFound = true;
+            plane.setAttribute('visible', true);
+            requestAnimationFrame(animate);
+        });
+
+        nft.addEventListener('markerLost', () => {
+            isMarkerFound = false;
+            plane.setAttribute('visible', false);
+        });
+    </script>
+</body>
+</html>
