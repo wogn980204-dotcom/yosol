@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Final Stable - Fixed Color</title>
+    <title>AR Ultra Stable - Final Offset</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
@@ -17,8 +17,7 @@
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <p>시스템 최적화 및 색상 보정 중...</p>
-        <p style="font-size: 11px; color: #888; margin-top: 5px;">준비가 완료되면 카메라가 활성화됩니다.</p>
+        <p>초정밀 오프셋 및 떨림 보정 중...</p>
     </div>
 
     <a-scene
@@ -32,15 +31,15 @@
             type="nft"
             url="" 
             smooth="true"
-            smoothCount="15"
+            smoothCount="30" 
             smoothTolerance="0.01"
             smoothThreshold="5">
             
             <a-plane
                 id="ani-plane"
-                position="180 0 -220" 
+                position="100 0 -280" 
                 rotation="-90 0 0"
-                width="350" height="350"
+                width="400" height="400"
                 material="shader: flat; transparent: true; alphaTest: 0.5; side: double; depthWrite: false; depthTest: false;"
                 visible="false">
             </a-plane>
@@ -53,7 +52,6 @@
         const nft = document.querySelector('#nft-target');
         const plane = document.querySelector('#ani-plane');
         
-        // 경로 안정화 로직
         const currentPath = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
         nft.setAttribute('url', currentPath + 'AR');
 
@@ -63,17 +61,15 @@
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 텍스처 로딩 및 색상 공간 설정
         const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             const frameNum = String(i).padStart(3, '0');
             const tex = texLoader.load(`${currentPath}frames/frame_${frameNum}.png`);
-            tex.encoding = THREE.sRGBEncoding; // 원본 색상 유지
+            tex.encoding = THREE.sRGBEncoding;
             textures.push(tex);
         }
 
         window.addEventListener('arjs-nft-loaded', () => {
-            console.log("NFT 트래킹 엔진 로드 성공");
             document.querySelector('#loader').style.display = 'none';
         });
 
