@@ -3,48 +3,45 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Final Stable</title>
+    <title>AR Stable Final</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         .arjs-loader {
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
-            background-color: black; z-index: 9999;
-            display: flex; justify-content: center; align-items: center; color: white;
-            font-family: sans-serif;
+            background-color: rgba(0, 0, 0, 0.9); z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; color: white;
         }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <div style="text-align: center;">
-            <p>AR 시스템 최적화 로드 중...</p>
-            <p style="font-size: 12px; color: #888;">잠시만 기다려 주세요.</p>
-        </div>
+        <p>AR 트래킹 엔진 최적화 중...</p>
+        <p id="status" style="font-size: 12px; color: #888;">잠시 후 카메라가 활성화됩니다.</p>
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true; colorManagement: true;"
+        renderer="antialias: true; alpha: true; precision: mediump;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft
             id="nft-target"
             type="nft"
-            url="" 
+            url="./AR" 
             smooth="true"
-            smoothCount="15"
-            smoothTolerance="0.01"
+            smoothCount="10"
+            smoothTolerance="0.02"
             smoothThreshold="5">
             
             <a-plane
                 id="ani-plane"
-                position="180 0 -220" 
+                position="180 0 -200" 
                 rotation="-90 0 0"
                 width="350" height="350"
-                material="shader: flat; transparent: true; alphaTest: 0.5; side: double; depthWrite: false;"
+                material="shader: flat; transparent: true; alphaTest: 0.1; side: double; depthTest: false; depthWrite: false;"
                 visible="false">
             </a-plane>
         </a-nft>
@@ -55,6 +52,21 @@
     <script>
         const nft = document.querySelector('#nft-target');
         const plane = document.querySelector('#ani-plane');
+        const statusEl = document.querySelector('#status');
         
-        // 1. 깃허브 절대 경로 계산 (로딩 멈춤 방지)
-        const
+        const totalFrames = 22;
+        const textures = [];
+        let currentIdx = 0;
+        let lastTime = 0;
+        let isMarkerFound = false;
+
+        // 1. 텍스처 로드 (메모리 점유 최소화)
+        const loader = new THREE.TextureLoader();
+        for (let i = 0; i < totalFrames; i++) {
+            const frameNum = String(i).padStart(3, '0');
+            textures.push(loader.load(`./frames/frame_${frameNum}.png`));
+        }
+
+        // 2. 엔진 로드 완료 감지
+        window.addEventListener('arjs-nft-loaded', () => {
+            console.log("NFT 트래킹 준비 완료");
