@@ -3,38 +3,37 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Ultimate Rebuild</title>
+    <title>AR Speed Optimize</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         .arjs-loader {
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
-            background-color: black; z-index: 9999;
+            background-color: #000; z-index: 9999;
             display: flex; justify-content: center; align-items: center; color: white;
-            font-family: sans-serif;
         }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader" id="loader">
-        <p>시스템 전면 재구축 및 최적화 중...</p>
+        <p>AR 엔진 즉시 로딩 중...</p>
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: false; colorManagement: true;"
+        renderer="antialias: false; alpha: true; precision: mediump; logarithmicDepthBuffer: false;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft
             id="nft-target"
             type="nft"
-            url="" 
+            url="./AR" 
             smooth="true"
-            smoothCount="20" 
-            smoothTolerance="0.001"
-            smoothThreshold="3">
+            smoothCount="10" 
+            smoothTolerance="0.01"
+            smoothThreshold="5">
             
             <a-plane
                 id="ani-plane"
@@ -52,39 +51,28 @@
     <script>
         const nft = document.querySelector('#nft-target');
         const plane = document.querySelector('#ani-plane');
-        
-        // 경로 안정화
-        const currentPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-        nft.setAttribute('url', currentPath + 'AR');
-
         const totalFrames = 22;
         const textures = [];
         let currentIdx = 0;
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 텍스처 로딩 최적화 (LinearFilter로 부드러움 강화)
+        // 텍스처 로딩 (로딩 중단 방지를 위해 단순화)
         const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             const frameNum = String(i).padStart(3, '0');
-            const tex = texLoader.load(`${currentPath}frames/frame_${frameNum}.png`, (t) => {
-                t.encoding = THREE.sRGBEncoding;
-                t.minFilter = THREE.LinearFilter;
-                t.magFilter = THREE.LinearFilter;
-            });
-            textures.push(tex);
+            textures.push(texLoader.load(`./frames/frame_${frameNum}.png`));
         }
 
+        // 엔진 로드 완료 시 즉시 로더 제거
         window.addEventListener('arjs-nft-loaded', () => {
-            document.querySelector('#loader').style.display = 'none';
+            const loader = document.querySelector('#loader');
+            if (loader) loader.style.display = 'none';
         });
 
-        // 프레임 업데이트 로직
         function animate(time) {
             if (!isMarkerFound) return;
-
-            // 약 15fps 수준의 부드러운 재생
-            if (time - lastTime > 65) { 
+            if (time - lastTime > 66) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
                     mesh.material.map = textures[currentIdx];
@@ -99,4 +87,13 @@
         nft.addEventListener('markerFound', () => {
             isMarkerFound = true;
             plane.setAttribute('visible', true);
-            request
+            requestAnimationFrame(animate);
+        });
+
+        nft.addEventListener('markerLost', () => {
+            isMarkerFound = false;
+            plane.setAttribute('visible', false);
+        });
+    </script>
+</body>
+</html>
