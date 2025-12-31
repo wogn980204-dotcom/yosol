@@ -3,23 +3,20 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR GitHub Path Fix</title>
+    <title>AR Alpha Success</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         .arjs-loader {
             height: 100%; width: 100%; position: absolute; top: 0; left: 0;
             background-color: #000; z-index: 9999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center; color: white;
-            font-family: sans-serif;
+            display: flex; justify-content: center; align-items: center; color: #fff;
         }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
-    <div class="arjs-loader" id="loader">
-        <div>AR 리소스 분석 중...</div>
-    </div>
+    <div class="arjs-loader" id="loader">화면을 구성하고 있습니다...</div>
 
     <a-scene
         embedded
@@ -54,19 +51,15 @@
         const plane = document.querySelector('#ani-plane');
         const loader = document.querySelector('#loader');
 
-        // 1. 깃허브 기반 경로 정규화 (frames 경로 최적화)
+        // 경로 정규화 (GitHub Pages 대응)
         const getCleanPath = () => {
             let path = window.location.pathname;
-            // 파일명(index.html 등)이 포함되어 있다면 제거하고 디렉토리까지만 추출
             let directory = path.substring(0, path.lastIndexOf('/') + 1);
             let base = window.location.origin + directory;
-            // 주소 끝에 /가 없다면 붙여줌
             return base.endsWith('/') ? base : base + '/';
         };
 
         const rootPath = getCleanPath();
-        
-        // NFT 마커 주소 설정
         nft.setAttribute('url', rootPath + 'AR');
 
         const totalFrames = 22;
@@ -75,32 +68,35 @@
         let lastTime = 0;
         let isMarkerFound = false;
 
-        // 2. 'frames' 폴더 내 리소스 로드 (슬래시 중복 방지 결합)
+        // 텍스처 프리로딩 (색상 공간 sRGB 강제)
         const texLoader = new THREE.TextureLoader();
         for (let i = 0; i < totalFrames; i++) {
             const frameNum = String(i).padStart(3, '0');
-            // frames 폴더 경로 명시적 결합
-            const imgUrl = rootPath + 'frames/frame_' + frameNum + '.png';
+            const imgUrl = `${rootPath}frames/frame_${frameNum}.png`;
             
             texLoader.load(imgUrl, (tex) => {
-                tex.encoding = THREE.sRGBEncoding;
+                tex.encoding = THREE.sRGBEncoding; // 원본 색상 유지
                 textures.push(tex);
             });
         }
 
-        // 엔진 초기화 감지 루프
+        // 로딩바 해제 조건: 카메라 피드가 활성화될 때
         const checkReady = setInterval(() => {
-            if (window.ARjs && document.querySelector('video')) {
-                loader.style.display = 'none';
+            const video = document.querySelector('video');
+            if (video && video.readyState >= 2) {
+                if(loader) loader.style.display = 'none';
                 clearInterval(checkReady);
             }
-        }, 1000);
+        }, 500);
 
         function animate(time) {
             if (!isMarkerFound) return;
+
+            // 약 15fps 애니메이션 제어
             if (time - lastTime > 66) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
+                    // 매 프레임마다 맵을 갱신하고 재렌더링 강제
                     mesh.material.map = textures[currentIdx];
                     mesh.material.needsUpdate = true;
                 }
