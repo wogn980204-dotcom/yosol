@@ -3,24 +3,24 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Universal Stable Fix</title>
+    <title>AR Final Stable</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 <body style="margin: 0; overflow: hidden;">
     <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff;">
-        기기별 최적화 엔진 가동 중 (S20/S21+ 대응)...
+        최종 렌더링 보정 중...
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="antialias: false; alpha: true; precision: mediump; logarithmicDepthBuffer: false; colorManagement: true;"
+        renderer="antialias: false; alpha: true; precision: mediump; logarithmicDepthBuffer: true; sortObjects: false;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft id="nft-target" type="nft" url="" 
-               smooth="true" smoothCount="50" smoothTolerance="0.1" smoothThreshold="5">
-            <a-plane id="ani-plane" position="100 25 -280" rotation="-90 0 0" width="450" height="450" visible="false"></a-plane>
+               smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
+            <a-plane id="ani-plane" position="100 0 -280" rotation="-90 0 0" width="450" height="450" visible="false"></a-plane>
         </a-nft>
         <a-entity camera></a-entity>
     </a-scene>
@@ -42,31 +42,31 @@
             const url = `${rootPath}frames/frame_${String(i).padStart(3, '0')}.png`;
             texLoader.load(url, (tex) => {
                 tex.encoding = THREE.sRGBEncoding;
-                tex.minFilter = THREE.NearestFilter; // 픽셀 경계선을 선명하게 하여 S21 실루엣 억제
+                // [실루엣 해결] 텍스처 데이터 자체를 강제로 투명하게 해석하게 함
+                tex.premultiplyAlpha = false;
                 textures[i] = tex;
                 if (++loadedCount === totalFrames) loader.style.display = 'none';
             });
         }
 
-        // [S21+ 실루엣 완전 제거] 
-        // 셰이더 코드에서 discard의 임계값을 0.9로 높여 
-        // 아주 미세한 반투명도 검은색으로 간주하고 제거합니다.
-        function applyHighPrecisionFix(mesh) {
+        function applyStableFix(mesh) {
             if (!mesh || !mesh.material) return;
             const m = mesh.material;
             
+            // 엔진의 간섭을 차단하는 강제 설정
             m.transparent = true;
-            m.depthTest = false; 
+            m.alphaTest = 0.5; 
+            m.depthTest = false;
             m.depthWrite = false;
-            m.alphaTest = 0.9; // 임계값 대폭 상향
             m.side = THREE.DoubleSide;
+            m.blending = THREE.NoBlending; // [핵심] 배경과 섞지 말고 캐릭터만 찍어냄
 
             if (!m.onBeforeCompile.injected) {
                 m.onBeforeCompile = (shader) => {
                     shader.fragmentShader = shader.fragmentShader.replace(
                         `#include <color_fragment>`,
                         `#include <color_fragment>
-                         if ( diffuseColor.a < 0.9 ) discard;`
+                         if ( diffuseColor.a < 0.5 ) discard;` 
                     );
                 };
                 m.onBeforeCompile.injected = true;
@@ -80,12 +80,11 @@
 
         function animate(time) {
             if (!isMarkerFound) return;
-
-            if (time - lastTime >= 66.6) { // 15fps
+            if (time - lastTime >= 66.6) { 
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
                     mesh.material.map = textures[currentIdx];
-                    applyHighPrecisionFix(mesh);
+                    applyStableFix(mesh);
                     currentIdx = (currentIdx + 1) % totalFrames;
                     lastTime = time;
                 }
@@ -104,16 +103,15 @@
             plane.setAttribute('visible', false);
         });
 
-        // [S20/S21+ 공통] 렌더러 직접 제어로 깊이 충돌 원천 차단
+        // [최종 디버깅 결과물] 렌더러 루프를 가로채서 매 순간 화면을 강제로 닦아냄
         const sceneEl = document.querySelector('a-scene');
         sceneEl.addEventListener('render-target-loaded', () => {
             const renderer = sceneEl.renderer;
+            renderer.autoClear = false; // 엔진의 자동 소거 방지
             const originalRender = renderer.render;
             renderer.render = function(scene, camera) {
+                renderer.clearDepth(); // 캐릭터를 그리기 전 배경 깊이 제거
                 originalRender.call(this, scene, camera);
-                if (isMarkerFound) {
-                    renderer.clearDepth(); 
-                }
             };
         });
     </script>
