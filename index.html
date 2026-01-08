@@ -3,211 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>AR Pro Shader Fix - 개선판</title>
+  <title>AR Debug - 로딩/마커 진단</title>
 
-  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-  <!-- AR.js (버전 고정 권장) -->
+  <!-- AR.js: 운영 환경에서는 버전 고정(릴리스 태그) 권장 -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
     #loading {
       position: absolute;
       top:0; left:0;
       width:100%; height:100%;
-      background:#000; color:#fff;
-      display:flex; justify-content:center; align-items:center;
+      background: rgba(0,0,0,0.85);
+      color:#fff;
+      display:flex; flex-direction:column;
+      justify-content:center; align-items:center;
       z-index:9999;
+      transition: opacity 0.25s ease;
     }
+    #loading.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
+    #loading .box { max-width: 90%; text-align:center; padding: 16px; }
+    #statusLog { margin-top: 12px; font-size: 13px; color:#ddd; text-align:left; max-height:180px; overflow:auto; width:320px; background: rgba(255,255,255,0.04); padding:8px; border-radius:6px; }
+    #forceHideBtn { margin-top:12px; padding:8px 12px; border:none; border-radius:6px; background:#28a745; color:#fff; cursor:pointer; }
+    #forceHideBtn.secondary { background:#6c757d; }
   </style>
-
-  <script>
-    AFRAME.registerComponent('transparent-animator', {
-      schema: {
-        totalFrames: { type: 'int', default: 22 },
-        fps: { type: 'number', default: 15 },
-        framesPath: { type: 'string', default: 'frames/' }, // 상대 경로(폴더)
-        filePrefix: { type: 'string', default: 'frame_' },
-        fileExt: { type: 'string', default: '.png' }
-      },
-
-      init: function () {
-        // 상태 초기화
-        this.loader = new THREE.TextureLoader();
-        // CORS 허용 (외부/다른 도메인 이미지 사용 시 필요)
-        if (this.loader && typeof this.loader.setCrossOrigin === 'function') {
-          try { this.loader.setCrossOrigin('anonymous'); } catch (e) { /* ignore */ }
-        }
-        this.textures = new Array(this.data.totalFrames);
-        this.loadedCount = 0;
-        this.currentIdx = 0;
-        this.lastTime = performance.now();
-        this.mesh = null;
-        this.allLoaded = false;
-        this.isVisible = false; // 마커가 보일 때만 애니메이션 재생
-
-        // 씬 렌더러 색관리 일치(가능하면 sRGB로 설정)
-        if (this.el.sceneEl && this.el.sceneEl.renderer) {
-          try {
-            this.el.sceneEl.renderer.outputEncoding = THREE.sRGBEncoding;
-          } catch (e) { /* 브라우저/버전 차이 무시 */ }
-        }
-
-        // rootPath 계산 (현재 HTML 파일 기준)
-        const rootPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-        // 프레임 로드
-        for (let i = 0; i < this.data.totalFrames; i++) {
-          const filename = `${this.data.filePrefix}${String(i).padStart(3, '0')}${this.data.fileExt}`;
-          const url = rootPath + this.data.framesPath + filename;
-
-          // onLoad / onError 처리 추가
-          this.loader.load(
-            url,
-            (tex) => {
-              // 색관리와 필터 설정
-              try { tex.encoding = THREE.sRGBEncoding; } catch (e) {}
-              // 부드러운 보간을 위해 LinearFilter 사용 (필요 시 mipmap 사용 권장)
-              tex.minFilter = THREE.LinearFilter;
-              tex.magFilter = THREE.LinearFilter;
-              tex.generateMipmaps = false;
-              this.textures[i] = tex;
-              this.loadedCount++;
-              if (this.loadedCount === this.data.totalFrames) {
-                this.allLoaded = true;
-              }
-            },
-            undefined,
-            (err) => {
-              // 로드 실패시 경고, 빈 슬롯으로 처리해 애니메이션 중 예외를 피함
-              console.warn('Frame load error for', url, err);
-              this.textures[i] = null;
-              this.loadedCount++;
-              if (this.loadedCount === this.data.totalFrames) {
-                this.allLoaded = true;
-              }
-            }
-          );
-        }
-
-        // 마커(부모 a-nft) 이벤트 리스너: 로딩 UI 제어 및 재생 제어
-        // a-plane 컴포넌트이므로 부모가 a-nft여야 함
-        const markerEl = this.el.parentElement || this.el.parentNode;
-        if (markerEl) {
-          markerEl.addEventListener('markerFound', () => {
-            this.isVisible = true;
-            const loaderDiv = document.getElementById('loading');
-            if (loaderDiv) loaderDiv.style.display = this.allLoaded ? 'none' : 'flex';
-          });
-          markerEl.addEventListener('markerLost', () => {
-            this.isVisible = false;
-            // 마커가 사라지면 로딩 메시지를 다시 보여주지 않으려면 주석처리
-            const loaderDiv = document.getElementById('loading');
-            if (loaderDiv) loaderDiv.style.display = 'flex';
-          });
-        }
-      },
-
-      setupMesh: function () {
-        const mesh = this.el.getObject3D('mesh');
-        if (!mesh) return false;
-
-        this.mesh = mesh;
-
-        // material이 배열일 수도 있으니 첫번째 머티리얼을 사용 (단일 머티리얼인 경우 그대로)
-        const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-        if (!mat) return false;
-
-        // 안전한 기본 머티리얼 설정
-        mat.transparent = true;           // 투명 픽셀 처리를 위해 true
-        mat.alphaTest = 0.1;              // 투명도 기준 미만 픽셀 discard (onBeforeCompile 대체)
-        mat.opacity = 1.0;
-        mat.side = THREE.DoubleSide;
-        mat.depthWrite = false;           // 투명 객체라면 depth write는 보통 false
-        mat.depthTest = true;             // 깊이 테스트 유지(다른 오브젝트와의 오클루전을 위해)
-
-        // renderOrder를 과하게 높이지 않음(필요 시 조정)
-        mesh.renderOrder = 1;
-
-        // 첫 텍스처가 준비되어 있으면 연결 (없으면 나중에 tick에서 연결)
-        if (this.textures[0]) {
-          mat.map = this.textures[0];
-          if (mat.map) mat.map.needsUpdate = true;
-        } else {
-          mat.map = null;
-        }
-        mat.needsUpdate = true;
-
-        return true;
-      },
-
-      tick: function (time, timeDelta) {
-        // Mesh가 준비되지 않았으면 시도
-        if (!this.mesh) {
-          if (!this.setupMesh()) return;
-        }
-
-        // 마커가 안보이면 재생 중단
-        if (!this.isVisible) return;
-
-        // 모든 프레임이 로드될 때까지 대기 (부분 로드 허용하려면 변경 가능)
-        if (!this.allLoaded) {
-          // 로드 중일 때 로더 노출 유지
-          const loaderDiv = document.getElementById('loading');
-          if (loaderDiv) loaderDiv.style.display = 'flex';
-          return;
-        } else {
-          const loaderDiv = document.getElementById('loading');
-          if (loaderDiv) loaderDiv.style.display = 'none';
-        }
-
-        // 프레임 교체 주기 계산
-        const interval = 1000 / this.data.fps;
-        if (time - this.lastTime >= interval) {
-          const tex = this.textures[this.currentIdx];
-          if (tex && this.mesh && this.mesh.material) {
-            // material이 배열인 경우 첫번째 머티리얼을 사용
-            const mat = Array.isArray(this.mesh.material) ? this.mesh.material[0] : this.mesh.material;
-
-            // map 교체: material.needsUpdate는 재컴파일을 유발할 수 있으므로
-            // tex.needsUpdate를 true로 해서 업로드를 보장
-            mat.map = tex;
-            if (mat.map) mat.map.needsUpdate = true;
-            // 필요할 때만 material.needsUpdate = true; (지금은 필요 최소화)
-          }
-
-          this.currentIdx = (this.currentIdx + 1) % this.data.totalFrames;
-          this.lastTime = time;
-        }
-      },
-
-      remove: function () {
-        // 컴포넌트 제거 시 텍스처 및 머티리얼 정리
-        try {
-          if (this.textures && this.textures.length) {
-            this.textures.forEach((t) => {
-              if (t && typeof t.dispose === 'function') {
-                t.dispose();
-              }
-            });
-          }
-          if (this.mesh && this.mesh.material) {
-            const mat = Array.isArray(this.mesh.material) ? this.mesh.material[0] : this.mesh.material;
-            if (mat) {
-              if (mat.map) { mat.map = null; }
-              if (typeof mat.dispose === 'function') mat.dispose();
-            }
-          }
-        } catch (e) {
-          console.warn('Error while disposing resources', e);
-        }
-      }
-    });
-  </script>
 </head>
 
 <body>
-  <div id="loading">시스템 초기화 중... 마커를 비춰주세요.</div>
+  <div id="loading" role="status" aria-live="polite">
+    <div class="box">
+      <div id="mainMsg">시스템 초기화 중... 마커를 비춰주세요.</div>
+      <div id="statusLog"></div>
+      <div style="margin-top:10px;">
+        <button id="forceHideBtn">강제로 숨기기 (테스트)</button>
+        <button id="toggleDebugBtn" class="secondary" style="margin-left:8px;">디버그 콘솔 표시</button>
+      </div>
+    </div>
+  </div>
 
   <a-scene
     embedded
@@ -215,14 +48,9 @@
     renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: true; colorManagement: true;"
     arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
-    <!-- NFT 마커: url은 폴더(끝에 슬래시 포함) 또는 descriptor 경로 -->
     <a-nft id="nft-target" type="nft" url="" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="2">
-      <!--
-        개선:
-        - position을 마커 중심(0 0 0)으로 두고 크기를 현실적으로 지정(예: 1x1).
-        - 이전 값(매우 큰 좌표/사이즈)은 AR 좌표계에서 보이지 않게 만들 수 있음.
-      -->
       <a-plane
+        id="animPlane"
         position="0 0 0"
         rotation="-90 0 0"
         width="1"
@@ -236,22 +64,217 @@
   </a-scene>
 
   <script>
-    // a-nft URL 설정(현재 HTML 파일 기준으로 AR 폴더)
-    const nft = document.querySelector('#nft-target');
-    const loaderDiv = document.querySelector('#loading');
-    const rootPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-    // 'AR' 폴더가 실제로 존재하고 descriptor(.iset 등)가 그 폴더 아래에 있어야 함.
-    nft.setAttribute('url', rootPath + 'AR/');
+    // 유틸: 로깅 UI
+    const loaderDiv = document.getElementById('loading');
+    const mainMsg = document.getElementById('mainMsg');
+    const statusLog = document.getElementById('statusLog');
+    function uiLog(msg) {
+      console.log('[UI]', msg);
+      const el = document.createElement('div');
+      el.textContent = (new Date()).toLocaleTimeString() + ' - ' + msg;
+      statusLog.appendChild(el);
+      statusLog.scrollTop = statusLog.scrollHeight;
+    }
+    document.getElementById('forceHideBtn').addEventListener('click', () => {
+      uiLog('사용자 강제 숨김 버튼 클릭');
+      hideLoader();
+    });
+    document.getElementById('toggleDebugBtn').addEventListener('click', () => {
+      // 브라우저 콘솔이 열려있어야 로그 확인 가능; 추가 동작은 없음
+      uiLog('콘솔을 확인하세요(개발자 도구).');
+    });
 
-    // 기존 스크립트의 markerFound 동작은 컴포넌트에서 처리하므로 여기서는 로깅 정도만 수행
-    nft.addEventListener('markerFound', () => {
-      if (loaderDiv && loaderDiv.style.display !== 'none') loaderDiv.style.display = 'none';
-      console.log('markerFound');
+    function showLoader(msg) {
+      if (msg) mainMsg.textContent = msg;
+      loaderDiv.classList.remove('hidden');
+      loaderDiv.style.pointerEvents = 'auto';
+    }
+    function hideLoader(msg) {
+      if (msg) uiLog(msg);
+      loaderDiv.classList.add('hidden');
+      // pointer-events none으로 씬 상호작용 방해 제거
+      loaderDiv.style.pointerEvents = 'none';
+    }
+
+    // transparent-animator 컴포넌트 (개선판, 디버그 로그 포함)
+    AFRAME.registerComponent('transparent-animator', {
+      schema: {
+        totalFrames: { type: 'int', default: 22 },
+        fps: { type: 'number', default: 15 },
+        framesPath: { type: 'string', default: 'frames/' },
+        filePrefix: { type: 'string', default: 'frame_' },
+        fileExt: { type: 'string', default: '.png' }
+      },
+
+      init: function () {
+        uiLog('transparent-animator init');
+        this.loader = new THREE.TextureLoader();
+        if (this.loader && typeof this.loader.setCrossOrigin === 'function') {
+          try { this.loader.setCrossOrigin('anonymous'); } catch (e) { console.warn(e); }
+        }
+        this.textures = new Array(this.data.totalFrames);
+        this.loadedCount = 0;
+        this.currentIdx = 0;
+        this.lastTime = performance.now();
+        this.mesh = null;
+        this.allLoaded = false;
+        this.isVisible = false;
+
+        // root path 계산
+        const rootPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+        this._rootPath = rootPath;
+        uiLog('프레임 루트: ' + rootPath + this.data.framesPath);
+
+        for (let i = 0; i < this.data.totalFrames; i++) {
+          const filename = `${this.data.filePrefix}${String(i).padStart(3, '0')}${this.data.fileExt}`;
+          const url = rootPath + this.data.framesPath + filename;
+          this.loader.load(
+            url,
+            (tex) => {
+              try { tex.encoding = THREE.sRGBEncoding; } catch (e) {}
+              tex.minFilter = THREE.LinearFilter;
+              tex.magFilter = THREE.LinearFilter;
+              tex.generateMipmaps = false;
+              this.textures[i] = tex;
+              this.loadedCount++;
+              uiLog(`프레임 ${i} 로드 완료 (${this.loadedCount}/${this.data.totalFrames})`);
+              if (this.loadedCount === this.data.totalFrames) {
+                this.allLoaded = true;
+                uiLog('모든 프레임 로드 완료');
+              }
+            },
+            undefined,
+            (err) => {
+              this.textures[i] = null;
+              this.loadedCount++;
+              uiLog(`프레임 ${i} 로드 실패: ${url}`);
+              if (this.loadedCount === this.data.totalFrames) {
+                this.allLoaded = true;
+                uiLog('프레임 로드 완료(일부 실패 포함)');
+              }
+            }
+          );
+        }
+
+        // 부모(마커) 이벤트 바인딩: 찾기/놓침 이벤트
+        // 부모가 a-nft일 것으로 기대
+        const parent = this.el.parentElement || this.el.parentNode;
+        if (parent) {
+          parent.addEventListener('markerFound', () => {
+            uiLog('parent markerFound 이벤트 수신');
+            this.isVisible = true;
+          });
+          parent.addEventListener('markerLost', () => {
+            uiLog('parent markerLost 이벤트 수신');
+            this.isVisible = false;
+          });
+        } else {
+          uiLog('parent element 없음 - 마커 이벤트를 못받을 수 있음');
+        }
+      },
+
+      setupMesh: function () {
+        const mesh = this.el.getObject3D('mesh');
+        if (!mesh) return false;
+        this.mesh = mesh;
+        const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        if (!mat) return false;
+
+        mat.transparent = true;
+        mat.alphaTest = 0.1;
+        mat.opacity = 1.0;
+        mat.side = THREE.DoubleSide;
+        mat.depthWrite = false;
+        mat.depthTest = true;
+        mesh.renderOrder = 1;
+
+        if (this.textures[0]) {
+          mat.map = this.textures[0];
+          if (mat.map) mat.map.needsUpdate = true;
+        }
+        mat.needsUpdate = true;
+        uiLog('메쉬/머티리얼 설정 완료');
+        return true;
+      },
+
+      tick: function (time/*, timeDelta */) {
+        if (!this.mesh) {
+          if (!this.setupMesh()) return;
+        }
+        if (!this.isVisible) return;
+        if (!this.allLoaded) return;
+
+        const interval = 1000 / this.data.fps;
+        if (time - this.lastTime >= interval) {
+          const tex = this.textures[this.currentIdx];
+          if (tex && this.mesh && this.mesh.material) {
+            const mat = Array.isArray(this.mesh.material) ? this.mesh.material[0] : this.mesh.material;
+            mat.map = tex;
+            if (mat.map) mat.map.needsUpdate = true;
+          }
+          this.currentIdx = (this.currentIdx + 1) % this.data.totalFrames;
+          this.lastTime = time;
+        }
+      },
+
+      remove: function () {
+        uiLog('transparent-animator remove 호출 - 리소스 해제 시도');
+        try {
+          if (this.textures && this.textures.length) {
+            this.textures.forEach((t) => {
+              if (t && typeof t.dispose === 'function') t.dispose();
+            });
+          }
+          if (this.mesh && this.mesh.material) {
+            const mat = Array.isArray(this.mesh.material) ? this.mesh.material[0] : this.mesh.material;
+            if (mat && typeof mat.dispose === 'function') mat.dispose();
+          }
+        } catch (e) {
+          console.warn(e);
+        }
+      }
     });
-    nft.addEventListener('markerLost', () => {
-      if (loaderDiv) loaderDiv.style.display = 'flex';
-      console.log('markerLost');
-    });
+
+    // a-nft URL 설정 및 전반적 디버깅
+    (function setup() {
+      const nft = document.querySelector('#nft-target');
+      const rootPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+      const nftUrl = rootPath + 'AR/'; // 실제 NFT descriptor 폴더(또는 descriptor 파일 경로)로 수정 필요
+      uiLog('설정된 NFT URL: ' + nftUrl);
+      console.log('설정된 NFT URL:', nftUrl);
+      nft.setAttribute('url', nftUrl);
+
+      // a-nft 및 씬 이벤트 확인
+      nft.addEventListener('markerFound', () => {
+        uiLog('a-nft markerFound 이벤트 발생');
+        // 모든 프레임이 준비되어 있으면 로더 숨김
+        setTimeout(() => {
+          // 컴포넌트 내 상태가 바뀔 수 있으므로 약간 지연
+          const comp = document.querySelector('#animPlane').components['transparent-animator'];
+          if (comp && comp.allLoaded) {
+            hideLoader('마커 발견 및 프레임 준비 완료 - 로더 숨김');
+          } else {
+            uiLog('마커 발견 - 하지만 프레임 로드가 아직 완료되지 않았을 수 있음');
+          }
+        }, 200);
+      });
+
+      nft.addEventListener('markerLost', () => {
+        uiLog('a-nft markerLost 이벤트 발생');
+        // 마커가 사라지면 로더 재표시(선택)
+        showLoader('마커를 다시 찾을 때까지 대기 중...');
+      });
+
+      // 안전장치: 만약 10초 안에 마커 못찾으면 로더 자동 숨김(사용자 테스트용)
+      setTimeout(() => {
+        uiLog('타임아웃 검사: 10초 경과');
+        if (!document.querySelector('#animPlane').components['transparent-animator'].isVisible) {
+          uiLog('마커를 찾지 못함 — 강제 숨김 제안');
+          // 주석처리하려면 아래 호출 제거
+          // hideLoader('마커를 찾지 못해 로더를 자동으로 숨깁니다(테스트 목적).');
+        }
+      }, 10000);
+    })();
   </script>
 </body>
 </html>
