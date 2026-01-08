@@ -3,16 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>AR - 간단 실행 페이지</title>
+  <title>AR - 사용자용 실행 페이지</title>
 
-  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-  <!-- AR.js (NFT 지원) - 운영 시에는 고정된 릴리스 버전 사용 권장 -->
+  <!-- 운영 환경에서는 고정된 릴리스 버전 사용 권장 -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 
   <style>
-    html,body { height:100%; margin:0; }
-    /* 전체 화면으로 카메라 영상과 AR이 보이도록 기본 스타일만 적용 */
+    html,body { height:100%; margin:0; background: #000; }
+    /* 소비자용: UI 최소화. 카메라 영상과 AR만 보이게 함. */
   </style>
 </head>
 
@@ -20,18 +19,11 @@
   <a-scene
     embedded
     vr-mode-ui="enabled: false"
-    renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: true; colorManagement: true;"
+    renderer="antialias: true; alpha: true; precision: highp; colorManagement: true;"
     arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
-    
-    <!--
-      a-nft: url은 실제 NFT descriptor(.iset/.fset 등)가 있는 폴더(또는 descriptor 파일 경로)로 변경하세요.
-      예: nft.setAttribute('url', location.origin + '/AR/');
-    -->
+
+    <!-- NFT 마커: url을 실제 descriptor 경로(폴더 끝에 / 포함)로 설정하세요. -->
     <a-nft id="nft-target" type="nft" url="">
-      <!--
-        평면은 초기에는 보이지 않게 하고, 마커가 잡히면 보이도록 처리합니다.
-        위치/회전/크기는 마커와의 원하는 배치에 맞게 조절하세요.
-      -->
       <a-plane
         id="animPlane"
         position="0 0 0"
@@ -39,7 +31,8 @@
         width="1"
         height="1"
         visible="false"
-        material="shader: flat; transparent: true; side: double;">
+        /* 기본 material은 흰색이며 투명 지원하도록 명시 */
+        material="color: #ffffff; side: double; transparent: true;">
       </a-plane>
     </a-nft>
 
@@ -47,105 +40,114 @@
   </a-scene>
 
   <script>
-    AFRAME.registerComponent('transparent-animator', {
+    // 소비자 모드 component: Canvas 기반 프레임 애니메이터 (알파 안정화)
+    AFRAME.registerComponent('canvas-frame-anim', {
       schema: {
         totalFrames: { type: 'int', default: 22 },
         fps: { type: 'number', default: 15 },
-        framesPath: { type: 'string', default: 'frames/' }, // frames/ 폴더에 이미지가 있어야 함
+        framesPath: { type: 'string', default: 'frames/' }, // index.html 기준 상대폴더
         filePrefix: { type: 'string', default: 'frame_' },
-        fileExt: { type: 'string', default: '.png' }
+        fileExt: { type: 'string', default: '.png' },
+        autoNftUrl: { type: 'string', default: 'AR/' } // 필요시 자동 설정
       },
 
       init: function () {
-        this.loader = new THREE.TextureLoader();
-        if (this.loader && typeof this.loader.setCrossOrigin === 'function') {
-          try { this.loader.setCrossOrigin('anonymous'); } catch (e) { /* ignore */ }
-        }
-
-        this.textures = new Array(this.data.totalFrames);
+        this.images = new Array(this.data.totalFrames);
         this.loadedCount = 0;
         this.currentIdx = 0;
         this.lastTime = performance.now();
+        this.playing = false;
+        this.canvas = null;
+        this.ctx = null;
+        this.canvasTexture = null;
         this.mesh = null;
-        this.playing = false; // 마커가 잡힐 때 true로 변경
 
-        // base path 계산 (현재 html 위치 기준)
+        // root path 계산 (index.html 기준)
         const root = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
         this._root = root;
 
-        // 비동기 로드: 실패해도 가능한 프레임으로 재생
-        for (let i = 0; i < this.data.totalFrames; i++) {
-          const name = `${this.data.filePrefix}${String(i).padStart(3, '0')}${this.data.fileExt}`;
-          const url = root + this.data.framesPath + name;
-          this.loader.load(
-            url,
-            (tex) => {
-              try { tex.encoding = THREE.sRGBEncoding; } catch (e) {}
-              tex.minFilter = THREE.LinearFilter;
-              tex.magFilter = THREE.LinearFilter;
-              tex.generateMipmaps = false;
-              this.textures[i] = tex;
-              this.loadedCount++;
-            },
-            undefined,
-            () => {
-              // 실패한 프레임은 null로 두고 전체 재생에서 건너뜀
-              this.textures[i] = null;
-              this.loadedCount++;
-            }
-          );
+        // NFT 자동 URL 설정(원치 않으면 a-nft의 url 속성 직접 설정)
+        const nftEl = document.querySelector('#nft-target');
+        if (nftEl && !nftEl.getAttribute('url')) {
+          try { nftEl.setAttribute('url', root + this.data.autoNftUrl); } catch(e) {}
         }
 
-        // 마커 이벤트: a-nft (부모)에서 발생
-        const nftEl = document.querySelector('#nft-target');
-        const planeEl = document.querySelector('#animPlane');
+        // 이미지 로드 (Image 객체 사용)
+        for (let i = 0; i < this.data.totalFrames; i++) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          const filename = `${this.data.filePrefix}${String(i).padStart(3, '0')}${this.data.fileExt}`;
+          img.src = root + this.data.framesPath + filename;
 
-        // 안전: nft url 자동 설정(필요 시 사용자가 수정)
-        // 기본은 같은 경로의 'AR/' 폴더로 설정합니다. 실제 경로가 다르면 변경하세요.
-        try {
-          const autoUrl = this._root + 'AR/';
-          if (nftEl && !nftEl.getAttribute('url')) nftEl.setAttribute('url', autoUrl);
-        } catch (e) { /* ignore */ }
+          img.onload = (() => {
+            return (ev) => {
+              this.images[i] = img;
+              this.loadedCount++;
+              // 캔버스 크기 설정: 첫 이미지 로드 시 캔버스 생성
+              if (!this.canvas) {
+                this.canvas = document.createElement('canvas');
+                this.canvas.width = img.width;
+                this.canvas.height = img.height;
+                this.ctx = this.canvas.getContext('2d', { alpha: true });
+                // 초기 클리어(투명)
+                this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+                // THREE.CanvasTexture 생성
+                this.canvasTexture = new THREE.CanvasTexture(this.canvas);
+                this.canvasTexture.encoding = THREE.sRGBEncoding;
+                this.canvasTexture.minFilter = THREE.LinearFilter;
+                this.canvasTexture.magFilter = THREE.LinearFilter;
+                this.canvasTexture.generateMipmaps = false;
+                // 연결은 mesh 준비 후에 수행
+              }
+            };
+          })();
 
+          img.onerror = (() => {
+            return () => {
+              // 실패해도 null로 두고 전체 동작 유지
+              this.images[i] = null;
+              this.loadedCount++;
+            };
+          })();
+        }
+
+        // 마커 이벤트: a-nft 엘리먼트에 바인딩
         if (nftEl) {
           nftEl.addEventListener('markerFound', () => {
-            // 보이는 상태로 바꾸고 재생 시작
-            if (planeEl) planeEl.setAttribute('visible', 'true');
+            const plane = document.querySelector('#animPlane');
+            if (plane) plane.setAttribute('visible', 'true');
             this.playing = true;
-            // ensure mesh will be setup on next tick
+            // ensure mesh re-setup
             this.mesh = null;
           });
-
           nftEl.addEventListener('markerLost', () => {
-            if (planeEl) planeEl.setAttribute('visible', 'false');
+            const plane = document.querySelector('#animPlane');
+            if (plane) plane.setAttribute('visible', 'false');
             this.playing = false;
           });
         }
       },
 
       setupMesh: function () {
-        const plane = this.el;
-        const mesh = plane.getObject3D('mesh');
+        const planeEl = this.el;
+        const mesh = planeEl.getObject3D('mesh');
         if (!mesh) return false;
         this.mesh = mesh;
 
-        // 단일 머티리얼 처리
+        // 첫 텍스처(캔버스 텍스처)가 준비되었으면 머티리얼에 연결
         const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         if (!mat) return false;
 
-        // 안전한 머티리얼 설정: alphaTest로 알파가 낮은 픽셀은 discard
+        // 안정적 머티리얼 설정: 알파테스트와 깊이 설정
         mat.transparent = true;
-        mat.alphaTest = 0.1;
-        mat.opacity = 1.0;
+        mat.alphaTest = 0.02; // 너무 높으면 자글거릴 수 있으므로 낮게 설정
         mat.side = THREE.DoubleSide;
-        mat.depthWrite = false; // 투명 물체라면 depth write 끔
+        mat.depthWrite = false;
         mat.depthTest = true;
 
-        // 가능한 첫 텍스처를 연결 (없으면 null)
-        const first = this.textures.find(t => !!t);
-        if (first) {
-          mat.map = first;
-          if (mat.map) mat.map.needsUpdate = true;
+        if (this.canvasTexture) {
+          mat.map = this.canvasTexture;
+          mat.map.needsUpdate = true;
         } else {
           mat.map = null;
         }
@@ -154,35 +156,38 @@
         return true;
       },
 
-      tick: function (time/*, timeDelta */) {
+      tick: function (time/*, delta */) {
         // mesh 준비
         if (!this.mesh) {
           if (!this.setupMesh()) return;
         }
 
-        // 재생 상태가 아니면 아무것도 하지 않음
+        // 재생중이 아니면 skip
         if (!this.playing) return;
 
-        // 적어도 하나의 텍스처가 로드되어 있어야 재생
-        const any = this.textures.some(t => !!t);
-        if (!any) return;
+        // 캔버스/이미지 준비 확인 (최소 하나 이상의 이미지가 로드되어야 함)
+        if (!this.canvas || this.loadedCount === 0) return;
 
         const interval = 1000 / this.data.fps;
         if (time - this.lastTime >= interval) {
-          // 현재 인덱스부터 순회하여 유효한 텍스처 찾기
+          // find next valid image
           let attempts = 0;
-          let tex = null;
+          let img = null;
           while (attempts < this.data.totalFrames) {
             const idx = (this.currentIdx + attempts) % this.data.totalFrames;
-            if (this.textures[idx]) { tex = this.textures[idx]; this.currentIdx = (idx + 1) % this.data.totalFrames; break; }
+            if (this.images[idx]) { img = this.images[idx]; this.currentIdx = (idx + 1) % this.data.totalFrames; break; }
             attempts++;
           }
 
-          if (tex && this.mesh && this.mesh.material) {
-            const mat = Array.isArray(this.mesh.material) ? this.mesh.material[0] : this.mesh.material;
-            // map 교체 (가능하면 material.needsUpdate는 최소화)
-            mat.map = tex;
-            if (mat.map) mat.map.needsUpdate = true;
+          if (img) {
+            // clear and draw image to canvas (preserve alpha)
+            this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+            // drawImage fills RGBA canvas; preserves image alpha channel
+            this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
+            // inform three.js texture to update from canvas
+            if (this.canvasTexture) {
+              this.canvasTexture.needsUpdate = true;
+            }
           }
 
           this.lastTime = time;
@@ -190,19 +195,17 @@
       },
 
       remove: function () {
-        // 리소스 정리(안정성)
+        // dispose resources
         try {
-          if (this.textures && this.textures.length) {
-            this.textures.forEach(t => { if (t && typeof t.dispose === 'function') t.dispose(); });
-          }
+          if (this.canvasTexture && typeof this.canvasTexture.dispose === 'function') this.canvasTexture.dispose();
         } catch (e) { /* ignore */ }
       }
     });
 
-    // 컴포넌트 연결: 평면에 자동으로 추가
+    // 컴포넌트를 plane에 자동 부착
     document.addEventListener('DOMContentLoaded', function () {
       const plane = document.querySelector('#animPlane');
-      if (plane) plane.setAttribute('transparent-animator', '');
+      if (plane) plane.setAttribute('canvas-frame-anim', '');
     });
   </script>
 </body>
