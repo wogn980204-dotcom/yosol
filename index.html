@@ -3,64 +3,53 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>AR - 모바일 디버그 개선판</title>
+  <title>AR - 마커 진단용 (모바일 테스트)</title>
 
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-  <!-- AR.js: 운영 환경에서는 버전 고정(릴리스 태그) 권장 -->
+  <!-- AR.js: 운영 환경에서는 릴리스 태그(버전 고정) 사용 권장 -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 
   <style>
     body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
-    #loading {
+    #overlay {
       position: absolute;
-      top:0; left:0;
-      width:100%; height:100%;
-      background: rgba(0,0,0,0.85);
-      color:#fff;
-      display:flex; flex-direction:column;
-      justify-content:center; align-items:center;
-      z-index:9999;
-      transition: opacity 0.25s ease;
-    }
-    #loading.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
-    #loading .box { max-width: 90%; text-align:center; padding: 16px; }
-    #statusRow { margin-top: 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
-    .statusBadge { background: rgba(255,255,255,0.06); padding:6px 10px; border-radius:8px; font-size:13px; color:#fff; }
-    #forceHideBtn { margin-top:12px; padding:8px 12px; border:none; border-radius:6px; background:#28a745; color:#fff; cursor:pointer; }
-    #forceHideBtn.secondary { background:#6c757d; }
-    #debugOverlay {
-      position: absolute;
-      right: 8px;
+      left: 8px;
       top: 8px;
       z-index: 10000;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0,0,0,0.5);
       color: #fff;
       padding: 8px 10px;
       border-radius: 8px;
       font-size: 13px;
-      pointer-events: none;
+      max-width: 92%;
     }
+    #overlay .row { display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+    .badge { background: rgba(255,255,255,0.06); padding:6px 10px; border-radius:8px; color:#fff; }
+    #controls { position: absolute; right: 8px; top: 8px; z-index:10000; }
+    #controls button { padding:8px 10px; margin-left:6px; border-radius:6px; border:none; }
   </style>
 </head>
 
 <body>
-  <div id="loading" role="status" aria-live="polite">
-    <div class="box">
-      <div id="mainMsg">시스템 초기화 중... 마커를 비춰주세요.</div>
-
-      <div id="statusRow">
-        <div id="framesStatus" class="statusBadge">프레임: 0 / 0</div>
-        <div id="markerStatus" class="statusBadge">마커: 미검출</div>
-        <div id="animStatus" class="statusBadge">애니: 대기</div>
-      </div>
-
-      <div style="margin-top:10px;">
-        <button id="forceHideBtn">강제로 숨기기 (테스트)</button>
-      </div>
+  <div id="overlay" aria-live="polite">
+    <div class="row">
+      <div id="nftStatus" class="badge">NFT: 대기</div>
+      <div id="patternStatus" class="badge">Hiro: 대기</div>
+      <div id="framesStatus" class="badge">프레임: 0/0</div>
+      <div id="animStatus" class="badge">애니: 대기</div>
+    </div>
+    <div style="font-size:12px; opacity:0.9;">
+      테스트 방법:
+      1) 'Hiro 테스트'를 눌러 화면 오른쪽(또는 인쇄된) Hiro 마커를 비춰보세요.
+      2) Hiro가 감지되면 빨간 박스가 나타나야 합니다(AR.js 동작 확인).
+      3) NFT가 작동하지 않으면 NFT 경로(AR 폴더, descriptor 파일) 또는 파일 접근 문제일 가능성 큽니다.
     </div>
   </div>
 
-  <div id="debugOverlay" aria-hidden="true">로그: 모바일 모드 - 콘솔 없음</div>
+  <div id="controls">
+    <button id="hideUI">로더 숨기기</button>
+    <button id="testHiro">Hiro 테스트</button>
+  </div>
 
   <a-scene
     embedded
@@ -68,58 +57,50 @@
     renderer="antialias: true; alpha: true; precision: highp; logarithmicDepthBuffer: true; colorManagement: true;"
     arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
+    <!-- NFT 마커 (실제 NFT 경로로 바꿔야 함) -->
     <a-nft id="nft-target" type="nft" url="" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="2">
+      <!-- 영상/애니를 표시할 평면 (프레임 애니메이터 적용) -->
       <a-plane
-        id="animPlane"
+        id="nftPlane"
         position="0 0 0"
         rotation="-90 0 0"
-        width="1"
-        height="1"
+        width="1" height="1"
         material="shader: flat; transparent: true; side: double;"
         transparent-animator="totalFrames: 22; fps: 15; framesPath: frames/">
       </a-plane>
     </a-nft>
 
+    <!-- 패턴(프리셋) 마커: Hiro 테스트용.
+         모바일에서 바로 테스트하려면 Hiro 마커를 다른 화면에 띄우거나 인쇄해서 비추세요. -->
+    <a-marker id="hiroMarker" preset="hiro" emitevents="true" visible="false">
+      <!-- Hiro가 잡히면 이 박스가 보입니다(디버깅용) -->
+      <a-box id="hiroDebugBox" position="0 0.5 0" depth="0.3" height="0.3" width="0.3" color="red" visible="false"></a-box>
+      <a-text id="hiroLabel" value="Hiro Detected" position="0 0.95 0" align="center" visible="false"></a-text>
+    </a-marker>
+
     <a-entity camera></a-entity>
   </a-scene>
 
   <script>
-    // 화면 요소
-    const loaderDiv = document.getElementById('loading');
-    const mainMsg = document.getElementById('mainMsg');
+    // UI 요소
+    const nftStatus = document.getElementById('nftStatus');
+    const patternStatus = document.getElementById('patternStatus');
     const framesStatus = document.getElementById('framesStatus');
-    const markerStatus = document.getElementById('markerStatus');
     const animStatus = document.getElementById('animStatus');
-    const forceHideBtn = document.getElementById('forceHideBtn');
+    const hideUIbtn = document.getElementById('hideUI');
+    const testHiroBtn = document.getElementById('testHiro');
 
-    function updateFramesStatus(loaded, total) {
-      framesStatus.textContent = `프레임: ${loaded} / ${total}`;
-    }
-    function updateMarkerStatus(found) {
-      markerStatus.textContent = `마커: ${found ? '감지' : '미검출'}`;
-    }
-    function updateAnimStatus(text) {
-      animStatus.textContent = `애니: ${text}`;
-    }
-
-    function hideLoaderUI() {
-      loaderDiv.classList.add('hidden');
-      loaderDiv.style.pointerEvents = 'none';
-    }
-    function showLoaderUI(msg) {
-      if (msg) mainMsg.textContent = msg;
-      loaderDiv.classList.remove('hidden');
-      loaderDiv.style.pointerEvents = 'auto';
-    }
-
-    // 강제 숨기기 버튼: UI만 숨기고 컴포넌트 동작을 막지 않음
-    forceHideBtn.addEventListener('click', () => {
-      hideLoaderUI();
-      // 모바일이라 콘솔 못보는 걸 고려해 작은 안내
-      document.getElementById('debugOverlay').textContent = '로더 강제 숨김. 마커를 비춰보세요.';
+    hideUIbtn.addEventListener('click', () => {
+      document.getElementById('overlay').style.display = 'none';
     });
 
-    // transparent-animator 개선판 (더 관대하게 동작)
+    // Helper to update badges
+    function setBadge(el, text, color) {
+      el.textContent = text;
+      if (color) el.style.background = color;
+    }
+
+    // Transparent animator 컴포넌트 (간단화, 프레임 일부만 있어도 작동)
     AFRAME.registerComponent('transparent-animator', {
       schema: {
         totalFrames: { type: 'int', default: 22 },
@@ -140,172 +121,152 @@
         this.currentIdx = 0;
         this.lastTime = performance.now();
         this.mesh = null;
-        this.allLoaded = false;
-        this.isVisible = false;
+        this.anyLoaded = false;
 
-        // root path 계산
+        // rootPath
         const rootPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
         this._rootPath = rootPath;
 
-        updateFramesStatus(this.loadedCount, this.data.totalFrames);
-
-        // 프레임 로드: 실패가 있어도 가능한 프레임으로 재생 허용
-        for (let i = 0; i < this.data.totalFrames; i++) {
-          const filename = `${this.data.filePrefix}${String(i).padStart(3, '0')}${this.data.fileExt}`;
-          const url = rootPath + this.data.framesPath + filename;
+        // load frames (onError allowed)
+        for (let i=0;i<this.data.totalFrames;i++){
+          const fname = `${this.data.filePrefix}${String(i).padStart(3,'0')}${this.data.fileExt}`;
+          const url = rootPath + this.data.framesPath + fname;
           this.loader.load(
             url,
             (tex) => {
-              try { tex.encoding = THREE.sRGBEncoding; } catch (e) {}
+              try { tex.encoding = THREE.sRGBEncoding; } catch(e){}
               tex.minFilter = THREE.LinearFilter;
               tex.magFilter = THREE.LinearFilter;
               tex.generateMipmaps = false;
               this.textures[i] = tex;
               this.loadedCount++;
-              updateFramesStatus(this.loadedCount, this.data.totalFrames);
-              if (this.loadedCount === this.data.totalFrames) {
-                this.allLoaded = true;
-                updateAnimStatus('준비 완료');
-                // 만약 마커가 이미 보이는 상태라면 곧바로 재생을 시작하게 함
-              }
+              this.anyLoaded = true;
+              framesStatus.textContent = `프레임: ${this.loadedCount}/${this.data.totalFrames}`;
             },
             undefined,
             (err) => {
               this.textures[i] = null;
               this.loadedCount++;
-              updateFramesStatus(this.loadedCount, this.data.totalFrames);
-              if (this.loadedCount === this.data.totalFrames) {
-                this.allLoaded = true;
-                updateAnimStatus('준비(일부 실패 포함)');
-              }
+              framesStatus.textContent = `프레임: ${this.loadedCount}/${this.data.totalFrames} (일부 실패)`;
             }
           );
         }
-
-        // 마커 이벤트 리스너: 여러 대상을 등록해서 놓칠 가능성 줄임
-        const attachMarkerListeners = (target) => {
-          if (!target) return;
-          target.addEventListener('markerFound', () => {
-            this.isVisible = true;
-            updateMarkerStatus(true);
-            updateAnimStatus(this.allLoaded || this.loadedCount > 0 ? '재생 중' : '로딩 중');
-            // 로더 UI는 기본적으로 숨김 처리 (사용자가 강제 숨김했다면 이미 숨겨져 있음)
-            hideLoaderUI();
-          });
-          target.addEventListener('markerLost', () => {
-            this.isVisible = false;
-            updateMarkerStatus(false);
-            updateAnimStatus('일시정지');
-            // 로더 UI를 다시 보여주고 싶지 않다면 이 라인을 주석처리하세요.
-            showLoaderUI('마커를 다시 찾는 중...');
-          });
-        };
-
-        // 우선 a-nft(부모), 씬(scene), document에 리스너 부착
-        const parent = this.el.parentElement || this.el.parentNode;
-        attachMarkerListeners(parent);
-        if (this.el.sceneEl) attachMarkerListeners(this.el.sceneEl);
-        attachMarkerListeners(document);
-
-        // 안전장치: 일정 시간 뒤에도 아무 프레임도 로드되지 않으면 UI에 안내
-        setTimeout(() => {
-          if (this.loadedCount === 0) {
-            updateAnimStatus('프레임 로드 실패 가능성');
-            // 화면에 안내를 남기지만 자동으로 UI를 숨기지 않음
-          }
-        }, 7000);
       },
 
-      setupMesh: function () {
+      setupMesh: function() {
         const mesh = this.el.getObject3D('mesh');
         if (!mesh) return false;
         this.mesh = mesh;
         const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         if (!mat) return false;
-
         mat.transparent = true;
         mat.alphaTest = 0.1;
-        mat.opacity = 1.0;
-        mat.side = THREE.DoubleSide;
         mat.depthWrite = false;
         mat.depthTest = true;
         mesh.renderOrder = 1;
 
-        // 첫 사용 가능한 텍스처를 찾아 연결
-        const firstTex = this.textures.find(t => !!t);
-        if (firstTex) {
-          mat.map = firstTex;
-          if (mat.map) mat.map.needsUpdate = true;
-        } else {
-          mat.map = null;
-        }
+        const first = this.textures.find(t=>!!t);
+        if (first) { mat.map = first; if(mat.map) mat.map.needsUpdate = true; }
         mat.needsUpdate = true;
         return true;
       },
 
-      tick: function (time/*, timeDelta */) {
+      tick: function (time) {
         if (!this.mesh) {
           if (!this.setupMesh()) return;
         }
+        // if no frames loaded, do nothing
+        if (!this.anyLoaded) {
+          animStatus.textContent = '애니: 프레임 없음';
+          return;
+        }
 
-        // 마커가 보이지 않으면 재생 중지
-        if (!this.isVisible) return;
-
-        // 프레임이 하나도 로드되지 않았다면 아무것도 하지 않음
-        if (this.loadedCount === 0) return;
-
+        // only animate if the NFT marker is visible (we rely on markerFound handlers in outer scope to hide/show UI)
+        // but here we still animate when plane is visible in scene.
         const interval = 1000 / this.data.fps;
         if (time - this.lastTime >= interval) {
-          // 현재 인덱스부터 순회하여 유효한 텍스처 찾기 (null은 건너뜀)
+          // find next available texture
           let attempts = 0;
           let tex = null;
           while (attempts < this.data.totalFrames) {
             const idx = (this.currentIdx + attempts) % this.data.totalFrames;
-            if (this.textures[idx]) { tex = this.textures[idx]; this.currentIdx = (idx + 1) % this.data.totalFrames; break; }
+            if (this.textures[idx]) { tex = this.textures[idx]; this.currentIdx = (idx+1)%this.data.totalFrames; break; }
             attempts++;
           }
           if (tex && this.mesh && this.mesh.material) {
             const mat = Array.isArray(this.mesh.material) ? this.mesh.material[0] : this.mesh.material;
             mat.map = tex;
             if (mat.map) mat.map.needsUpdate = true;
-            updateAnimStatus('재생 중');
+            animStatus.textContent = '애니: 재생 중';
           } else {
-            // 텍스처가 하나도 없는 경우(모두 null)에는 재생 상태 갱신
-            updateAnimStatus('프레임 없음');
+            animStatus.textContent = '애니: 프레임 없음';
           }
-
           this.lastTime = time;
         }
-      },
-
-      remove: function () {
-        try {
-          if (this.textures && this.textures.length) {
-            this.textures.forEach((t) => {
-              if (t && typeof t.dispose === 'function') t.dispose();
-            });
-          }
-          if (this.mesh && this.mesh.material) {
-            const mat = Array.isArray(this.mesh.material) ? this.mesh.material[0] : this.mesh.material;
-            if (mat) {
-              if (mat.map) mat.map = null;
-              if (typeof mat.dispose === 'function') mat.dispose();
-            }
-          }
-        } catch (e) { console.warn(e); }
       }
     });
 
-    // a-nft URL 설정 (실제 경로로 수정 필요)
-    (function setupNFT() {
+    // Set NFT URL (수정 필요: 실제 descriptor 폴더/파일 경로로 변경)
+    (function() {
       const nft = document.querySelector('#nft-target');
       const rootPath = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-      const nftUrl = rootPath + 'AR/'; // AR/ 폴더(또는 descriptor 파일 경로)를 실제 환경에 맞추어 수정하세요.
+      const nftUrl = rootPath + 'AR/'; // << 실제 AR descriptor 폴더 또는 descriptor 파일 경로로 수정하세요
       nft.setAttribute('url', nftUrl);
-
-      // 모바일에서는 콘솔를 볼 수 없으니 오버레이 텍스트로 알려줌
-      document.getElementById('debugOverlay').textContent = `NFT URL: ${nftUrl}`;
+      nftStatus.textContent = `NFT: URL 설정됨`;
+      // Attach markerFound/markerLost on the nft element
+      nft.addEventListener('markerFound', () => {
+        nftStatus.textContent = 'NFT: 감지';
+        // show the NFT plane (it is child of a-nft so should show automatically if attached)
+        const plane = document.getElementById('nftPlane');
+        if (plane) plane.setAttribute('visible', 'true');
+      });
+      nft.addEventListener('markerLost', () => {
+        nftStatus.textContent = 'NFT: 미검출';
+      });
     })();
+
+    // Hiro marker handlers for quick test
+    (function() {
+      const hiro = document.querySelector('#hiroMarker');
+      const box = document.getElementById('hiroDebugBox');
+      const label = document.getElementById('hiroLabel');
+
+      hiro.addEventListener('markerFound', () => {
+        patternStatus.textContent = 'Hiro: 감지';
+        // show debug box so user can see immediate feedback
+        box.setAttribute('visible', 'true');
+        label.setAttribute('visible', 'true');
+        // also make the box pulse so it's obvious
+        box.setAttribute('animation', 'property: position; to: 0 0.7 0; dir: alternate; dur: 500; loop: true');
+      });
+
+      hiro.addEventListener('markerLost', () => {
+        patternStatus.textContent = 'Hiro: 미검출';
+        box.setAttribute('visible', 'false');
+        label.setAttribute('visible', 'false');
+        box.removeAttribute('animation');
+      });
+
+      // Button to focus user on Hiro test
+      testHiroBtn.addEventListener('click', () => {
+        // Ensure overlay visible to see status badges
+        document.getElementById('overlay').style.display = 'block';
+        patternStatus.textContent = 'Hiro: 대기';
+        alert('Hiro 마커를 다른 화면(또는 인쇄물)에 띄우고 카메라로 비춰보세요.\n(Hiro 마커: https://raw.githubusercontent.com/jeromeetienne/AR.js/master/three.js/examples/marker-training/examples/pattern-files/marker-hiro.png)');
+      });
+    })();
+
+    // 추가 안내: 모바일에서 AR이 시작되지 않으면 확인할 것들
+    // 1) HTTPS로 서비스되고 있는지 (getUserMedia는 보안 컨텍스트 필요)
+    // 2) 카메라 권한 허용 여부
+    // 3) NFT descriptor(.iset/.fset 등) 파일이 nft.setAttribute('url', ...) 경로에 존재하는지
+    // 4) frames 폴더와 파일명(frame_000.png ~ frame_021.png)이 정확한지
+    // 5) 서버가 적절한 MIME과 CORS 헤더로 파일을 제공하는지
+
+    // 쉬운 진단 요���:
+    // - Hiro 박스를 비췄을 때 빨간 박스가 보이면 AR.js/카메라/트래킹 자체는 정상.
+    // - Hiro 작동하지만 NFT는 작동하지 않으면 => NFT 경로/descriptor 문제 (경로 확인, 파일 존재, https, CORS)
+    // - Hiro도 작동하지 않으면 => 카메라 권한, https, 또는 AR.js 로딩 문제
   </script>
 </body>
 </html>
