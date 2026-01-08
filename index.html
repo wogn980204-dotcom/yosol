@@ -3,24 +3,27 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Final Stable</title>
+    <title>AR Final Solution</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 <body style="margin: 0; overflow: hidden;">
-    <div id="loader" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #fff;">
-        최종 렌더링 보정 중...
+    <div id="loader" style="position: absolute; top:0; left:0; width:100%; height:100%; background:#000; z-index:9999; display:flex; justify-content:center; align-items:center; color:#fff;">
+        최종 엔진 최적화 중...
     </div>
 
     <a-scene
         embedded
         vr-mode-ui="enabled: false;"
-        renderer="antialias: false; alpha: true; precision: mediump; logarithmicDepthBuffer: true; sortObjects: false;"
+        renderer="antialias: false; alpha: true; precision: mediump; colorManagement: true; logarithmicDepthBuffer: false;"
         arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
 
         <a-nft id="nft-target" type="nft" url="" 
-               smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
-            <a-plane id="ani-plane" position="100 0 -280" rotation="-90 0 0" width="450" height="450" visible="false"></a-plane>
+               smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="2">
+            
+            <a-plane id="ani-plane" position="100 0 -280" rotation="-90 0 0" width="450" height="450" visible="false"
+                     material="shader: flat; transparent: true; alphaTest: 0.99; side: double; depthTest: false; depthWrite: false;">
+            </a-plane>
         </a-nft>
         <a-entity camera></a-entity>
     </a-scene>
@@ -38,40 +41,17 @@
         let loadedCount = 0;
         const texLoader = new THREE.TextureLoader();
 
+        // 텍스처 로딩 최적화
         for (let i = 0; i < totalFrames; i++) {
             const url = `${rootPath}frames/frame_${String(i).padStart(3, '0')}.png`;
             texLoader.load(url, (tex) => {
                 tex.encoding = THREE.sRGBEncoding;
-                // [실루엣 해결] 텍스처 데이터 자체를 강제로 투명하게 해석하게 함
-                tex.premultiplyAlpha = false;
+                // S21+ 실루엣 방지를 위한 필터링 고정
+                tex.magFilter = THREE.NearestFilter;
+                tex.minFilter = THREE.NearestFilter;
                 textures[i] = tex;
                 if (++loadedCount === totalFrames) loader.style.display = 'none';
             });
-        }
-
-        function applyStableFix(mesh) {
-            if (!mesh || !mesh.material) return;
-            const m = mesh.material;
-            
-            // 엔진의 간섭을 차단하는 강제 설정
-            m.transparent = true;
-            m.alphaTest = 0.5; 
-            m.depthTest = false;
-            m.depthWrite = false;
-            m.side = THREE.DoubleSide;
-            m.blending = THREE.NoBlending; // [핵심] 배경과 섞지 말고 캐릭터만 찍어냄
-
-            if (!m.onBeforeCompile.injected) {
-                m.onBeforeCompile = (shader) => {
-                    shader.fragmentShader = shader.fragmentShader.replace(
-                        `#include <color_fragment>`,
-                        `#include <color_fragment>
-                         if ( diffuseColor.a < 0.5 ) discard;` 
-                    );
-                };
-                m.onBeforeCompile.injected = true;
-            }
-            m.needsUpdate = true;
         }
 
         let currentIdx = 0;
@@ -80,11 +60,20 @@
 
         function animate(time) {
             if (!isMarkerFound) return;
-            if (time - lastTime >= 66.6) { 
+
+            // 15fps 정속 유지
+            if (time - lastTime >= 66.6) {
                 const mesh = plane.getObject3D('mesh');
                 if (mesh && textures[currentIdx]) {
-                    mesh.material.map = textures[currentIdx];
-                    applyStableFix(mesh);
+                    // 재질의 핵심 속성을 매 프레임 강제 고정 (엔진의 자동 복구 방어)
+                    const m = mesh.material;
+                    m.map = textures[currentIdx];
+                    m.alphaTest = 0.99; 
+                    m.transparent = true;
+                    m.depthTest = false;
+                    m.depthWrite = false;
+                    m.needsUpdate = true;
+
                     currentIdx = (currentIdx + 1) % totalFrames;
                     lastTime = time;
                 }
@@ -101,18 +90,6 @@
         nft.addEventListener('markerLost', () => {
             isMarkerFound = false;
             plane.setAttribute('visible', false);
-        });
-
-        // [최종 디버깅 결과물] 렌더러 루프를 가로채서 매 순간 화면을 강제로 닦아냄
-        const sceneEl = document.querySelector('a-scene');
-        sceneEl.addEventListener('render-target-loaded', () => {
-            const renderer = sceneEl.renderer;
-            renderer.autoClear = false; // 엔진의 자동 소거 방지
-            const originalRender = renderer.render;
-            renderer.render = function(scene, camera) {
-                renderer.clearDepth(); // 캐릭터를 그리기 전 배경 깊이 제거
-                originalRender.call(this, scene, camera);
-            };
         });
     </script>
 </body>
