@@ -3,26 +3,61 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>AR - 사용자용 실행 페이지</title>
+  <title>AR - 소비자용 (카메라 우선, 투명 오버레이)</title>
 
+  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-  <!-- 운영 환경에서는 고정된 릴리스 버전 사용 권장 -->
+  <!-- AR.js (NFT 지원) - 운영 시에는 고정 릴리스 경로로 호스팅 권장 -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 
   <style>
-    html,body { height:100%; margin:0; background: #000; }
-    /* 소비자용: UI 최소화. 카메라 영상과 AR만 보이게 함. */
+    html, body { height: 100%; margin: 0; background: #000; }
+    /* 카메라 영상(비디오)을 전체 배경으로 두고 A-Frame 씬은 그 위에 투명 캔버스 오버레이로 둡니다. */
+    #cameraFeed {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      background: #000;
+      transform: scaleX(-1); /* 전면/후면 카메라 뒤집힘 보정: AR.js가 자동으로 뒤집을 수 있으므로 필요시 제거 */
+    }
+    a-scene, canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none; /* 사용자가 소비자라면 터치로 씬이 방해되지 않도록 */
+    }
+    /* 마커 검출 여부의 소비자용 시각적 표시 (미니멀) */
+    #markerDot {
+      position: fixed;
+      right: 12px;
+      top: 12px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(255,0,0,0.85); /* 미검출: 빨강 */
+      z-index: 2;
+      box-shadow: 0 0 6px rgba(0,0,0,0.6);
+    }
   </style>
 </head>
 
 <body>
+  <!-- camera feed: getUserMedia로 직접 넣어 사용자에게 항상 카메라가 보이도록 보장 -->
+  <video id="cameraFeed" autoplay playsinline muted></video>
+
+  <!-- A-Frame 씬: 배경 투명, AR.js 사용 -->
   <a-scene
     embedded
     vr-mode-ui="enabled: false"
     renderer="antialias: true; alpha: true; precision: highp; colorManagement: true;"
     arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
-
-    <!-- NFT 마커: url을 실제 descriptor 경로(폴더 끝에 / 포함)로 설정하세요. -->
+    
+    <!-- NFT 마커: url을 실제 descriptor 폴더(끝에 슬래시 포함)로 설정하세요 -->
     <a-nft id="nft-target" type="nft" url="">
       <a-plane
         id="animPlane"
@@ -31,7 +66,6 @@
         width="1"
         height="1"
         visible="false"
-        /* 기본 material은 흰색이며 투명 지원하도록 명시 */
         material="color: #ffffff; side: double; transparent: true;">
       </a-plane>
     </a-nft>
@@ -39,16 +73,65 @@
     <a-entity camera></a-entity>
   </a-scene>
 
+  <!-- 소비자용 심플 표시: 마커 감지 시 초록으로 변화 -->
+  <div id="markerDot" aria-hidden="true" title="트래킹 상태"></div>
+
   <script>
-    // 소비자 모드 component: Canvas 기반 프레임 애니메이터 (알파 안정화)
+    // 1) 안전한 카메라 표시: getUserMedia로 비디오를 먼저 실행해 검은 화면을 회피
+    (function initCameraFeed() {
+      const video = document.getElementById('cameraFeed');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        // 브라우저가 지원하지 않으면 그냥 빈 화면
+        video.style.background = '#000';
+        return;
+      }
+      // 환경(facingMode:environment)을 요청
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+        .then(stream => {
+          video.srcObject = stream;
+          // 모바일에서 playsinline 보장
+          video.setAttribute('playsinline', '');
+          video.play().catch(()=>{/* play 자동재생 제한 무시 */});
+        })
+        .catch(err => {
+          // 사용자가 권한 거부 또는 다른 오류
+          console.warn('camera feed error', err);
+          // 소비자에게 별도 메시지 없이 검정 배경 유지
+        });
+    })();
+
+    // 2) 투명 오버레이 보장: A-Frame 렌더러가 초기화되면 배경을 투명으로 강제 설정
+    AFRAME.registerComponent('ensure-transparent-renderer', {
+      init: function() {
+        const scene = this.el.sceneEl;
+        // scene.renderer는 scene의 'loaded' 이벤트 이후에 ��재
+        if (scene && scene.renderer) {
+          try {
+            scene.renderer.setClearColor(0x000000, 0); // alpha 0
+            // DOM 캔버스 스타일 보정 (pointer events none 처리 위에 CSS 적용)
+            scene.renderer.domElement.style.background = 'transparent';
+          } catch (e) { /* ignore */ }
+        } else {
+          this.el.addEventListener('renderstart', () => {
+            try {
+              scene.renderer.setClearColor(0x000000, 0);
+              scene.renderer.domElement.style.background = 'transparent';
+            } catch (e) {}
+          });
+        }
+      }
+    });
+    document.querySelector('a-scene').setAttribute('ensure-transparent-renderer', '');
+
+    // 3) 소비자용: Canvas 기반 안정적 알파 애니메이션 컴포넌트
     AFRAME.registerComponent('canvas-frame-anim', {
       schema: {
         totalFrames: { type: 'int', default: 22 },
         fps: { type: 'number', default: 15 },
-        framesPath: { type: 'string', default: 'frames/' }, // index.html 기준 상대폴더
+        framesPath: { type: 'string', default: 'frames/' },
         filePrefix: { type: 'string', default: 'frame_' },
         fileExt: { type: 'string', default: '.png' },
-        autoNftUrl: { type: 'string', default: 'AR/' } // 필요시 자동 설정
+        autoNftUrl: { type: 'string', default: 'AR/' } // 자동으로 a-nft url 설정하려면 사용
       },
 
       init: function () {
@@ -62,68 +145,71 @@
         this.canvasTexture = null;
         this.mesh = null;
 
-        // root path 계산 (index.html 기준)
+        // root base path 계산
         const root = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
         this._root = root;
 
-        // NFT 자동 URL 설정(원치 않으면 a-nft의 url 속성 직접 설정)
+        // a-nft 자동 url 세팅: 실제 경로가 다르면 a-nft 요소의 url 속성을 직접 넣으세요
         const nftEl = document.querySelector('#nft-target');
         if (nftEl && !nftEl.getAttribute('url')) {
           try { nftEl.setAttribute('url', root + this.data.autoNftUrl); } catch(e) {}
         }
 
-        // 이미지 로드 (Image 객체 사용)
+        // 이미지 로드 (Image 객체). crossOrigin 및 onload/onerror 처리
         for (let i = 0; i < this.data.totalFrames; i++) {
           const img = new Image();
           img.crossOrigin = 'anonymous';
-          const filename = `${this.data.filePrefix}${String(i).padStart(3, '0')}${this.data.fileExt}`;
+          const filename = `${this.data.filePrefix}${String(i).padStart(3,'0')}${this.data.fileExt}`;
           img.src = root + this.data.framesPath + filename;
 
           img.onload = (() => {
-            return (ev) => {
-              this.images[i] = img;
+            const idx = i;
+            return () => {
+              this.images[idx] = img;
               this.loadedCount++;
-              // 캔버스 크기 설정: 첫 이미지 로드 시 캔버스 생성
               if (!this.canvas) {
+                // 첫 로드된 이미지 크기로 캔버스 초기화
                 this.canvas = document.createElement('canvas');
                 this.canvas.width = img.width;
                 this.canvas.height = img.height;
                 this.ctx = this.canvas.getContext('2d', { alpha: true });
-                // 초기 클리어(투명)
                 this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-                // THREE.CanvasTexture 생성
                 this.canvasTexture = new THREE.CanvasTexture(this.canvas);
-                this.canvasTexture.encoding = THREE.sRGBEncoding;
+                try { this.canvasTexture.encoding = THREE.sRGBEncoding; } catch(e) {}
                 this.canvasTexture.minFilter = THREE.LinearFilter;
                 this.canvasTexture.magFilter = THREE.LinearFilter;
                 this.canvasTexture.generateMipmaps = false;
-                // 연결은 mesh 준비 후에 수행
               }
             };
           })();
 
           img.onerror = (() => {
+            const idx = i;
             return () => {
-              // 실패해도 null로 두고 전체 동작 유지
-              this.images[i] = null;
+              this.images[idx] = null;
               this.loadedCount++;
             };
           })();
         }
 
-        // 마커 이벤트: a-nft 엘리먼트에 바인딩
+        // 마커 감지/상태: a-nft에 이벤트 바인딩
         if (nftEl) {
           nftEl.addEventListener('markerFound', () => {
-            const plane = document.querySelector('#animPlane');
-            if (plane) plane.setAttribute('visible', 'true');
             this.playing = true;
-            // ensure mesh re-setup
+            const plane = document.getElementById('animPlane');
+            if (plane) plane.setAttribute('visible', 'true');
+            // 표시: 마커Dot을 초록으로
+            const dot = document.getElementById('markerDot');
+            if (dot) dot.style.background = 'rgba(0,200,0,0.9)';
+            // ensure mesh re-setup on next tick
             this.mesh = null;
           });
           nftEl.addEventListener('markerLost', () => {
-            const plane = document.querySelector('#animPlane');
-            if (plane) plane.setAttribute('visible', 'false');
             this.playing = false;
+            const plane = document.getElementById('animPlane');
+            if (plane) plane.setAttribute('visible', 'false');
+            const dot = document.getElementById('markerDot');
+            if (dot) dot.style.background = 'rgba(255,0,0,0.85)';
           });
         }
       },
@@ -133,14 +219,11 @@
         const mesh = planeEl.getObject3D('mesh');
         if (!mesh) return false;
         this.mesh = mesh;
-
-        // 첫 텍스처(캔버스 텍스처)가 준비되었으면 머티리얼에 연결
         const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         if (!mat) return false;
 
-        // 안정적 머티리얼 설정: 알파테스트와 깊이 설정
         mat.transparent = true;
-        mat.alphaTest = 0.02; // 너무 높으면 자글거릴 수 있으므로 낮게 설정
+        mat.alphaTest = 0.02; // 부드럽게 알파 discard
         mat.side = THREE.DoubleSide;
         mat.depthWrite = false;
         mat.depthTest = true;
@@ -152,25 +235,20 @@
           mat.map = null;
         }
         mat.needsUpdate = true;
-
         return true;
       },
 
-      tick: function (time/*, delta */) {
-        // mesh 준비
+      tick: function (time) {
         if (!this.mesh) {
           if (!this.setupMesh()) return;
         }
 
-        // 재생중이 아니면 skip
         if (!this.playing) return;
-
-        // 캔버스/이미지 준비 확인 (최소 하나 이상의 이미지가 로드되어야 함)
         if (!this.canvas || this.loadedCount === 0) return;
 
         const interval = 1000 / this.data.fps;
         if (time - this.lastTime >= interval) {
-          // find next valid image
+          // 다음 유효 이미지 찾기
           let attempts = 0;
           let img = null;
           while (attempts < this.data.totalFrames) {
@@ -178,35 +256,38 @@
             if (this.images[idx]) { img = this.images[idx]; this.currentIdx = (idx + 1) % this.data.totalFrames; break; }
             attempts++;
           }
-
-          if (img) {
-            // clear and draw image to canvas (preserve alpha)
+          if (img && this.ctx) {
+            // 캔버스에 그려서 알파 유지(검은 실루엣 문제 해결 목적)
             this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-            // drawImage fills RGBA canvas; preserves image alpha channel
             this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
-            // inform three.js texture to update from canvas
-            if (this.canvasTexture) {
-              this.canvasTexture.needsUpdate = true;
-            }
+            if (this.canvasTexture) this.canvasTexture.needsUpdate = true;
           }
-
           this.lastTime = time;
         }
       },
 
       remove: function () {
-        // dispose resources
         try {
           if (this.canvasTexture && typeof this.canvasTexture.dispose === 'function') this.canvasTexture.dispose();
-        } catch (e) { /* ignore */ }
+        } catch (e) {}
       }
     });
 
-    // 컴포넌트를 plane에 자동 부착
-    document.addEventListener('DOMContentLoaded', function () {
-      const plane = document.querySelector('#animPlane');
+    // 자동으로 plane에 컴포넌트 적용
+    document.addEventListener('DOMContentLoaded', () => {
+      const plane = document.getElementById('animPlane');
       if (plane) plane.setAttribute('canvas-frame-anim', '');
+      // 기본적으로 마커Dot은 빨강(미검출)
+      document.getElementById('markerDot').style.background = 'rgba(255,0,0,0.85)';
     });
+
+    // 4) 팁: AR.js 내부 비디오 대신 우리 video를 사용하려는 것이 아니라,
+    // video는 사용자에게 '항상 카메라 영상'을 보여주기 위한 안전장치입니다.
+    // AR.js가 정상적으로 트래킹하면 a-nft가 마커를 잡아 평면을 보이게 합니다.
+    // 만약 화면이 계속 검정이면, 다음을 확인해 주세요(이미 확인하셨지만 소비자 관점 정리):
+    // - frames/*.png 들에 실제 알파 채널이 포함되어 있는지 (이미 알파가 없으면 검정 부분은 이미지 자체)
+    // - a-nft url 속성이 실제 descriptor(.iset/.fset 등)가 있는 폴더로 정확히 설정되어 있는지
+    // - 페이지는 HTTPS로 서빙되거나 localhost 인지 여부
   </script>
 </body>
 </html>
